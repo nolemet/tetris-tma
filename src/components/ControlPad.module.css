@@ -1,0 +1,47 @@
+.card {
+  background: var(--game-panel-bg, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--game-panel-border, rgba(255, 255, 255, 0.08));
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--tg-hint-color, #9ca3b5);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.grid button {
+  border: none;
+  border-radius: 10px;
+  min-height: 42px;
+  background: var(--tg-secondary-bg-color, #202636);
+  color: var(--tg-text-color, #eef2ff);
+  font-weight: 600;
+}
+
+.hardDrop {
+  grid-column: 1 / -1;
+  background: var(--tg-button-color, #3b82f6) !important;
+  color: var(--tg-button-text-color, #fff) !important;
+}
+
+.down {
+  grid-column: 2;
+}
+
+.hold {
+  grid-column: 1 / span 2;
+}
+
+.grid button:disabled {
+  opacity: 0.55;
+}

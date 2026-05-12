@@ -1,0 +1,156 @@
+.app {
+  min-height: var(--tg-viewport-stable-height, 100dvh);
+  background: var(--game-app-bg, var(--tg-bg-color, #10131a));
+  color: var(--tg-text-color, #f5f7fb);
+  padding: calc(env(safe-area-inset-top) + 10px) max(8px, env(safe-area-inset-right, 8px))
+    calc(env(safe-area-inset-bottom) + 12px) max(8px, env(safe-area-inset-left, 8px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-x: hidden;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.header {
+  text-align: center;
+}
+
+.title {
+  margin: 0;
+  font-size: 30px;
+  letter-spacing: 0.06em;
+}
+
+.caption {
+  margin: 6px 0 0;
+  color: var(--tg-hint-color, #9ca3b5);
+  font-size: 13px;
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 100%;
+  margin: 0 auto;
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+.boardSection {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.scaleOuter {
+  width: 100%;
+  max-width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  overflow: hidden;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+.scaleInner {
+  flex-shrink: 0;
+  will-change: transform;
+}
+
+.boardRow {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: stretch;
+  gap: 10px;
+  width: 100%;
+  max-width: 100%;
+}
+
+.sideHud {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 150px;
+  max-width: 150px;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.boardWrap {
+  position: relative;
+  width: fit-content;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--game-board-border, rgba(255, 255, 255, 0.09));
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.5);
+  background: var(--game-board-bg, #0a0d13);
+  touch-action: none;
+}
+
+.boardWrap > canvas {
+  flex-shrink: 0;
+}
+
+.boardWrap::after {
+  content: '';
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  pointer-events: none;
+}
+
+.lockPulse {
+  animation: lockPulse 130ms ease-out;
+}
+
+.hardDropPulse {
+  animation: hardDropPulse 180ms ease-out;
+}
+
+.gameOverPulse {
+  animation: gameOverPulse 260ms ease-out;
+}
+
+@keyframes lockPulse {
+  0% {
+    filter: brightness(1.14);
+  }
+  100% {
+    filter: brightness(1);
+  }
+}
+
+@keyframes hardDropPulse {
+  0% {
+    transform: scale(1);
+    filter: brightness(1.26);
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+}
+
+@keyframes gameOverPulse {
+  0% {
+    filter: brightness(1.2);
+  }
+  100% {
+    filter: brightness(1);
+  }
+}

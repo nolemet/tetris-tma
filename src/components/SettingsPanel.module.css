@@ -1,0 +1,154 @@
+.card {
+  background: var(--game-panel-bg, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--game-panel-border, rgba(255, 255, 255, 0.08));
+  border-radius: 12px;
+  padding: 12px;
+  display: grid;
+  gap: 14px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.title {
+  margin: 0;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--tg-hint-color, #9ca3b5);
+}
+
+.version {
+  font-size: 12px;
+  color: var(--tg-hint-color, #9ca3b5);
+}
+
+.group {
+  display: grid;
+  gap: 8px;
+}
+
+.groupTitle {
+  margin: 0;
+  font-size: 13px;
+}
+
+.list {
+  display: grid;
+  gap: 8px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.row button,
+.row select,
+.row input[type='number'] {
+  border: none;
+  min-height: 34px;
+  border-radius: 8px;
+  background: var(--tg-secondary-bg-color, #202636);
+  color: var(--tg-text-color, #eef2ff);
+  padding: 0 10px;
+  font-weight: 600;
+}
+
+.row input[type='range'] {
+  width: 130px;
+}
+
+.row input[type='number'] {
+  width: 72px;
+}
+
+.hint {
+  margin: 0;
+  color: var(--tg-hint-color, #9ca3b5);
+  font-size: 12px;
+}
+
+.keybindHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.keybindActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.keybindActions button,
+.keybindButtons button {
+  border: none;
+  min-height: 34px;
+  border-radius: 8px;
+  background: var(--tg-secondary-bg-color, #202636);
+  color: var(--tg-text-color, #eef2ff);
+  padding: 0 10px;
+  font-weight: 600;
+}
+
+.keybindList {
+  display: grid;
+  gap: 8px;
+}
+
+.keybindRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.keybindLabel {
+  font-size: 13px;
+  color: var(--tg-hint-color, #9ca3b5);
+}
+
+.keybindValue {
+  margin-top: 4px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.keybindButtons {
+  display: flex;
+  gap: 8px;
+}
+
+@media (max-width: 540px) {
+  .keybindHeader {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .keybindRow {
+    grid-template-columns: 1fr;
+  }
+
+  .keybindActions,
+  .keybindButtons {
+    justify-content: stretch;
+  }
+
+  .keybindActions button,
+  .keybindButtons button {
+    width: 100%;
+  }
+}

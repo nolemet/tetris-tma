@@ -1,0 +1,99 @@
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  padding: 16px;
+  text-align: center;
+  background: var(--game-overlay-bg, rgba(7, 9, 14, 0.85));
+  backdrop-filter: blur(2px);
+  animation: overlayFadeIn 180ms ease-out;
+  overflow-y: auto;
+}
+
+.title {
+  margin: 0;
+  font-size: 24px;
+}
+
+.text {
+  margin: 0;
+  font-size: 14px;
+  color: var(--tg-hint-color, #b4bccd);
+  max-width: 260px;
+}
+
+.buttonRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.statsGrid {
+  width: min(100%, 280px);
+  display: grid;
+  gap: 8px;
+  margin: 2px 0;
+}
+
+.statRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.statRow dt {
+  text-align: left;
+  color: var(--tg-hint-color, #b4bccd);
+}
+
+.statRow dd {
+  margin: 0;
+  font-weight: 700;
+}
+
+.meta {
+  margin: 0;
+  font-size: 12px;
+  color: var(--tg-hint-color, #b4bccd);
+  max-width: 280px;
+  word-break: break-word;
+}
+
+.primary,
+.secondary {
+  border: none;
+  border-radius: 10px;
+  min-height: 42px;
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.primary {
+  background: var(--tg-button-color, #3b82f6);
+  color: var(--tg-button-text-color, #fff);
+}
+
+.secondary {
+  background: var(--tg-secondary-bg-color, #222738);
+  color: var(--tg-text-color, #eef2ff);
+}
+
+@keyframes overlayFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

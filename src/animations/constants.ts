@@ -1,0 +1,4 @@
+export const LINE_CLEAR_ANIMATION_MS = 130
+export const FEEDBACK_ANIMATION_MS = 1100
+export const BOARD_LOCK_FLASH_MS = 130
+export const HARD_DROP_FLASH_MS = 180
