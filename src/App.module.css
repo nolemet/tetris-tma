@@ -42,6 +42,11 @@
   box-sizing: border-box;
 }
 
+.centerMain {
+  justify-content: center;
+  align-items: center;
+}
+
 .boardSection {
   display: flex;
   justify-content: center;
@@ -126,12 +131,47 @@
   animation: gameOverPulse 260ms ease-out;
 }
 
+.screenPanel {
+  width: min(100%, 720px);
+  margin: 0 auto;
+  display: grid;
+  gap: 12px;
+}
+
+.screenPanelHeader {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.backButton {
+  border: none;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 12px;
+  background: var(--tg-secondary-bg-color, #202636);
+  color: var(--tg-text-color, #eef2ff);
+  font-size: 14px;
+  font-weight: 700;
+}
+
 @keyframes lockPulse {
   0% {
     filter: brightness(1.14);
   }
   100% {
     filter: brightness(1);
+  }
+}
+
+@media (max-width: 900px) {
+  .boardRow {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .sideHud {
+    width: min(100%, 360px);
+    max-width: 100%;
   }
 }
 

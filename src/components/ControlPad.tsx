@@ -5,17 +5,19 @@ import styles from './ControlPad.module.css'
 interface ControlPadProps {
   state: GameState
   touchControlsEnabled: boolean
+  showHoldButton?: boolean
   onLeft: () => void
   onRight: () => void
   onRotate: () => void
   onSoftDrop: () => void
   onHardDrop: () => void
-  onHold: () => void
+  onHold?: () => void
 }
 
 export const ControlPad = ({
   state,
   touchControlsEnabled,
+  showHoldButton = false,
   onLeft,
   onRight,
   onRotate,
@@ -69,16 +71,18 @@ export const ControlPad = ({
         >
           Down
         </button>
-        <button
-          type="button"
-          className={styles.hold}
-          onClick={onHold}
-          disabled={disabled}
-          onTouchStart={stopTouchPropagation}
-          onTouchEnd={stopTouchPropagation}
-        >
-          Hold
-        </button>
+        {showHoldButton ? (
+          <button
+            type="button"
+            className={styles.hold}
+            onClick={onHold}
+            disabled={disabled}
+            onTouchStart={stopTouchPropagation}
+            onTouchEnd={stopTouchPropagation}
+          >
+            Hold
+          </button>
+        ) : null}
         <button
           type="button"
           className={styles.hardDrop}

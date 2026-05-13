@@ -8,6 +8,7 @@ interface StatsProps {
   comboCount: number
   comboGrace: number
   backToBackActive: boolean
+  onBackToMenu: () => void
   onTogglePause: () => void
   onNewGame: () => void
   onShareResult: () => void
@@ -20,6 +21,7 @@ export const Stats = ({
   comboCount,
   comboGrace,
   backToBackActive,
+  onBackToMenu,
   onTogglePause,
   onNewGame,
   onShareResult,
@@ -96,6 +98,15 @@ export const Stats = ({
           onTouchEnd={stopTouchPropagation}
         >
           Share result
+        </button>
+        <button
+          type="button"
+          className={styles.secondaryActionButton}
+          onClick={onBackToMenu}
+          onTouchStart={stopTouchPropagation}
+          onTouchEnd={stopTouchPropagation}
+        >
+          Menu
         </button>
       </div>
     </section>

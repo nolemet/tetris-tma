@@ -2,17 +2,20 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useBoardRowFit } from './hooks/useBoardRowFit'
 import { FEEDBACK_ANIMATION_MS, BOARD_LOCK_FLASH_MS, HARD_DROP_FLASH_MS } from './animations/constants'
 import { Board } from './components/Board'
-import { useControls } from './hooks/useControls'
-import { useGame } from './hooks/useGame'
-import { useTelegram } from './hooks/useTelegram'
 import { ControlPad } from './components/ControlPad'
 import { GameFeedback } from './components/GameFeedback'
+import { GameModesPanel } from './components/GameModesPanel'
+import { MainMenu } from './components/MainMenu'
 import { NextPiece } from './components/NextPiece'
 import { Overlay } from './components/Overlay'
 import { SettingsPanel } from './components/SettingsPanel'
 import { Stats } from './components/Stats'
+import { CLASSIC_MODE_CONFIG } from './game/modes'
+import { useControls } from './hooks/useControls'
+import { useGame } from './hooks/useGame'
+import { useTelegram } from './hooks/useTelegram'
 import { createDefaultKeybinds } from './settings/keybinds'
-import { loadSettings, resetSettings, updateSettings } from './settings/storage'
+import { resetSettings, updateSettings, loadSettings } from './settings/storage'
 import { soundManager } from './sound/manager'
 import { applyThemePreset } from './theme/applyTheme'
 import { getThemePreset } from './theme/presets'
@@ -20,9 +23,12 @@ import type { GameAction, GameSettings } from './types'
 import { shareResult } from './utils/share'
 import styles from './App.module.css'
 
+type AppScreen = 'menu' | 'game' | 'modes' | 'settings'
+
 function App() {
   const { webApp } = useTelegram()
   const [settings, setSettings] = useState<GameSettings>(() => loadSettings())
+  const [screen, setScreen] = useState<AppScreen>('menu')
   const game = useGame({
     startLevel: settings.gameplay.startLevel,
     animationsEnabled: settings.visual.animations,
@@ -37,7 +43,11 @@ function App() {
   const startCoreGame = game.startGame
   const restartCoreGame = game.restartGame
 
+  const isGameScreen = screen === 'game'
   const themePreset = useMemo(() => getThemePreset(settings.visual.theme), [settings.visual.theme])
+  const holdEnabledInCurrentMode = CLASSIC_MODE_CONFIG.enableHold
+  const showHoldPreviewInCurrentMode =
+    holdEnabledInCurrentMode && CLASSIC_MODE_CONFIG.showHoldPreview && settings.gameplay.showHoldPiece
 
   useEffect(() => {
     applyThemePreset(settings.visual.theme)
@@ -92,7 +102,7 @@ function App() {
       soundManager.vibrate([28, 20, 28], settings.sound)
     }
 
-    if (messages.length > 0 && settings.visual.animations) {
+    if (messages.length > 0 && settings.visual.animations && isGameScreen) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setFeedbackMessages((prev) => [...prev, ...messages])
       messages.forEach((message) => {
@@ -101,37 +111,37 @@ function App() {
         }, FEEDBACK_ANIMATION_MS)
       })
     }
-  }, [game.lastLockFeedback, game.stats.level, settings.sound, settings.visual.animations])
+  }, [game.lastLockFeedback, game.stats.level, isGameScreen, settings.sound, settings.visual.animations])
 
   useEffect(() => {
-    if (game.lockFlashKey === 0) {
+    if (game.lockFlashKey === 0 || !isGameScreen) {
       return
     }
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLockPulse(true)
     const timer = window.setTimeout(() => setLockPulse(false), BOARD_LOCK_FLASH_MS)
     return () => window.clearTimeout(timer)
-  }, [game.lockFlashKey])
+  }, [game.lockFlashKey, isGameScreen])
 
   useEffect(() => {
-    if (game.hardDropFlashKey === 0) {
+    if (game.hardDropFlashKey === 0 || !isGameScreen) {
       return
     }
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setHardDropPulse(true)
     const timer = window.setTimeout(() => setHardDropPulse(false), HARD_DROP_FLASH_MS)
     return () => window.clearTimeout(timer)
-  }, [game.hardDropFlashKey])
+  }, [game.hardDropFlashKey, isGameScreen])
 
   useEffect(() => {
-    if (game.gameOverFlashKey === 0) {
+    if (game.gameOverFlashKey === 0 || !isGameScreen) {
       return
     }
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setGameOverPulse(true)
     const timer = window.setTimeout(() => setGameOverPulse(false), 260)
     return () => window.clearTimeout(timer)
-  }, [game.gameOverFlashKey])
+  }, [game.gameOverFlashKey, isGameScreen])
 
   const playButtonClick = useCallback(() => {
     soundManager.play('buttonClick', settings.sound)
@@ -139,6 +149,10 @@ function App() {
 
   const dispatchGameAction = useCallback(
     (action: GameAction): boolean => {
+      if (action === 'hold' && !holdEnabledInCurrentMode) {
+        return false
+      }
+
       const handled = dispatchCoreGameAction(action)
       if (!handled) {
         return false
@@ -156,7 +170,7 @@ function App() {
 
       return true
     },
-    [dispatchCoreGameAction, settings.sound],
+    [dispatchCoreGameAction, holdEnabledInCurrentMode, settings.sound],
   )
 
   const handleShareResult = useCallback(() => {
@@ -172,6 +186,13 @@ function App() {
       window.location.href,
     )
   }, [game.isNewRecord, game.stats.level, game.stats.lines, game.stats.score, playButtonClick, webApp])
+
+  const handlePlayClassic = useCallback(() => {
+    playButtonClick()
+    setFeedbackMessages([])
+    startCoreGame()
+    setScreen('game')
+  }, [playButtonClick, startCoreGame])
 
   const onMoveLeft = useCallback(() => {
     dispatchGameAction('moveLeft')
@@ -191,10 +212,6 @@ function App() {
 
   const onHardDrop = useCallback(() => {
     dispatchGameAction('hardDrop')
-  }, [dispatchGameAction])
-
-  const onHold = useCallback(() => {
-    dispatchGameAction('hold')
   }, [dispatchGameAction])
 
   const onTogglePause = useCallback(() => {
@@ -231,6 +248,24 @@ function App() {
     setSettings(resetSettings())
   }, [])
 
+  const onOpenModes = useCallback(() => {
+    playButtonClick()
+    setScreen('modes')
+  }, [playButtonClick])
+
+  const onOpenSettings = useCallback(() => {
+    playButtonClick()
+    setScreen('settings')
+  }, [playButtonClick])
+
+  const onBackToMenu = useCallback(() => {
+    playButtonClick()
+    if (game.state === 'PLAYING') {
+      dispatchCoreGameAction('pause')
+    }
+    setScreen('menu')
+  }, [dispatchCoreGameAction, game.state, playButtonClick])
+
   const { bindBoardControls } = useControls({
     gameState: game.state,
     keybinds: settings.controls.keybinds,
@@ -251,6 +286,8 @@ function App() {
     .filter(Boolean)
     .join(' ')
 
+  const mainClassName = [styles.main, isGameScreen ? '' : styles.centerMain].filter(Boolean).join(' ')
+
   return (
     <div className={styles.app}>
       <header className={styles.header}>
@@ -258,84 +295,104 @@ function App() {
         <p className={styles.caption}>{webApp ? 'Telegram Mini App' : 'Web mode'}</p>
       </header>
 
-      <main className={styles.main}>
-        <section ref={sectionRef} className={styles.boardSection}>
-          <div ref={outerRef} className={styles.scaleOuter}>
-            <div ref={innerRef} className={styles.scaleInner}>
-              <div ref={rowRef} className={styles.boardRow}>
-                <div className={boardWrapClass}>
-                  <Board
-                    board={game.board}
-                    activePiece={game.activePiece}
-                    ghostPiece={settings.gameplay.ghostPiece ? game.ghostPiece : null}
-                    lineClearRows={game.lineClearRows}
-                    showGrid={settings.visual.showGrid}
-                    blockStyle={settings.visual.blockStyle}
-                    pieceColors={themePreset.pieceColors}
-                    ghostColor={themePreset.ghostColor}
-                    onTouchStart={boardControls.onTouchStart}
-                    onTouchEnd={boardControls.onTouchEnd}
-                  />
-                  <GameFeedback messages={feedbackMessages} />
-                  <Overlay
-                    state={game.state}
-                    score={game.stats.score}
-                    level={game.stats.level}
-                    lines={game.stats.lines}
-                    isNewRecord={game.isNewRecord}
-                    gameResult={game.completedGameResult}
-                    onStart={onStartGame}
-                    onResume={onTogglePause}
-                    onRestart={onRestartGame}
-                    onShare={handleShareResult}
-                  />
-                </div>
-                <div className={styles.sideHud}>
-                  <Stats
-                    stats={game.stats}
-                    gameState={game.state}
-                    comboCount={game.comboCount}
-                    comboGrace={game.comboGrace}
-                    backToBackActive={game.backToBackActive}
-                    onTogglePause={onTogglePause}
-                    onNewGame={onRestartGame}
-                    onShareResult={handleShareResult}
-                    layout="sidebar"
-                  />
-                  {settings.gameplay.showHoldPiece ? (
-                    <NextPiece
-                      title="HOLD"
-                      pieceType={game.heldPieceType}
-                      pieceColors={themePreset.pieceColors}
-                      layout="sidebar"
-                    />
-                  ) : null}
-                  {settings.gameplay.showNextPiece ? (
-                    <NextPiece pieceType={game.nextPieceType} pieceColors={themePreset.pieceColors} layout="sidebar" />
-                  ) : null}
+      <main className={mainClassName}>
+        {screen === 'menu' ? (
+          <MainMenu onPlay={handlePlayClassic} onOpenModes={onOpenModes} onOpenSettings={onOpenSettings} />
+        ) : null}
+
+        {screen === 'modes' ? <GameModesPanel onBack={onBackToMenu} /> : null}
+
+        {screen === 'settings' ? (
+          <section className={styles.screenPanel}>
+            <div className={styles.screenPanelHeader}>
+              <button type="button" className={styles.backButton} onClick={onBackToMenu}>
+                Назад
+              </button>
+            </div>
+            <SettingsPanel
+              settings={settings}
+              onChange={onSettingsChange}
+              onResetKeybinds={onResetKeybinds}
+              onResetAllSettings={onResetAllSettings}
+            />
+          </section>
+        ) : null}
+
+        {screen === 'game' ? (
+          <>
+            <section ref={sectionRef} className={styles.boardSection}>
+              <div ref={outerRef} className={styles.scaleOuter}>
+                <div ref={innerRef} className={styles.scaleInner}>
+                  <div ref={rowRef} className={styles.boardRow}>
+                    <div className={boardWrapClass}>
+                      <Board
+                        board={game.board}
+                        activePiece={game.activePiece}
+                        ghostPiece={settings.gameplay.ghostPiece ? game.ghostPiece : null}
+                        lineClearRows={game.lineClearRows}
+                        showGrid={settings.visual.showGrid}
+                        blockStyle={settings.visual.blockStyle}
+                        pieceColors={themePreset.pieceColors}
+                        ghostColor={themePreset.ghostColor}
+                        onTouchStart={boardControls.onTouchStart}
+                        onTouchEnd={boardControls.onTouchEnd}
+                      />
+                      <GameFeedback messages={feedbackMessages} />
+                      <Overlay
+                        state={game.state}
+                        score={game.stats.score}
+                        level={game.stats.level}
+                        lines={game.stats.lines}
+                        isNewRecord={game.isNewRecord}
+                        gameResult={game.completedGameResult}
+                        onStart={onStartGame}
+                        onResume={onTogglePause}
+                        onRestart={onRestartGame}
+                        onShare={handleShareResult}
+                      />
+                    </div>
+                    <div className={styles.sideHud}>
+                      <Stats
+                        stats={game.stats}
+                        gameState={game.state}
+                        comboCount={game.comboCount}
+                        comboGrace={game.comboGrace}
+                        backToBackActive={game.backToBackActive}
+                        onBackToMenu={onBackToMenu}
+                        onTogglePause={onTogglePause}
+                        onNewGame={onRestartGame}
+                        onShareResult={handleShareResult}
+                        layout="sidebar"
+                      />
+                      {settings.gameplay.showNextPiece ? (
+                        <NextPiece pieceType={game.nextPieceType} pieceColors={themePreset.pieceColors} layout="sidebar" />
+                      ) : null}
+                      {showHoldPreviewInCurrentMode ? (
+                        <NextPiece
+                          title="HOLD"
+                          pieceType={game.heldPieceType}
+                          pieceColors={themePreset.pieceColors}
+                          layout="sidebar"
+                        />
+                      ) : null}
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
-        </section>
+            </section>
 
-        <ControlPad
-          state={game.state}
-          touchControlsEnabled={settings.controls.enableTouchControls}
-          onLeft={onMoveLeft}
-          onRight={onMoveRight}
-          onRotate={onRotate}
-          onSoftDrop={onSoftDrop}
-          onHardDrop={onHardDrop}
-          onHold={onHold}
-        />
-
-        <SettingsPanel
-          settings={settings}
-          onChange={onSettingsChange}
-          onResetKeybinds={onResetKeybinds}
-          onResetAllSettings={onResetAllSettings}
-        />
+            <ControlPad
+              state={game.state}
+              touchControlsEnabled={settings.controls.enableTouchControls}
+              showHoldButton={holdEnabledInCurrentMode}
+              onLeft={onMoveLeft}
+              onRight={onMoveRight}
+              onRotate={onRotate}
+              onSoftDrop={onSoftDrop}
+              onHardDrop={onHardDrop}
+            />
+          </>
+        ) : null}
       </main>
     </div>
   )
