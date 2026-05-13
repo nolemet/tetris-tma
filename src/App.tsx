@@ -162,14 +162,20 @@ function App() {
   }, [game.gameOverFlashKey, isGameScreen])
 
   useEffect(() => {
-    if (!game.completedGameResult || savedResultIdRef.current === game.completedGameResult.id) {
+    if (game.state !== 'GAME_OVER' || !game.completedGameResult || savedResultIdRef.current === game.completedGameResult.id) {
       return
     }
 
     let replayId: string | null = null
     const recorder = activeReplayRef.current
     if (recorder) {
-      const replay = finalizeReplay(recorder, game.completedGameResult, Date.now())
+      const replay = finalizeReplay(
+        recorder,
+        game.completedGameResult,
+        Date.now(),
+        game.replayFrames,
+        game.visualReplayFrames,
+      )
       setReplays(saveReplay(replay))
       replayId = replay.id
       activeReplayRef.current = null
@@ -182,7 +188,7 @@ function App() {
       }),
     )
     savedResultIdRef.current = game.completedGameResult.id
-  }, [game.completedGameResult])
+  }, [game.completedGameResult, game.replayFrames, game.state, game.visualReplayFrames])
 
   const playButtonClick = useCallback(() => {
     soundManager.play('buttonClick', settings.sound)

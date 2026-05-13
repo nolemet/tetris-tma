@@ -10,6 +10,7 @@ import { countBoardHoles, getBoardHeight } from '../game/metrics'
 import { createPieceGenerator, getNextPiece, peekNextPiece, type PieceGenerator } from '../game/pieceGenerator'
 import { calculateGameGrade, calculateGameRating } from '../game/results'
 import { generateGameSeed } from '../game/seededRandom'
+import { TETROMINO_SHAPES } from '../game/tetrominoes'
 import {
   canPlacePiece,
   createEmptyBoard,
@@ -20,7 +21,8 @@ import {
   spawnNextPiece,
 } from '../game/engine'
 import { calculateLockScore, levelByLines, softDropScore, tickMsByLevel } from '../game/scoring'
-import { createPiece } from '../utils/piece'
+import type { ReplayFrame, VisualFrame, VisualFrameEvent, VisualPieceSnapshot } from '../replays/types'
+import { createPiece, rotateClockwise } from '../utils/piece'
 import { getHighScore, setHighScore } from '../utils/storage'
 import type { ActivePiece, BoardMatrix, GameAction, GameMode, GameResult, GameState, GameStats, TetrominoType } from '../types'
 
@@ -73,6 +75,8 @@ interface GameModel {
   lastLockFeedback: LockFeedback | null
   completedGameResult: GameResult | null
   tick: number
+  replayFrames: ReplayFrame[]
+  visualReplayFrames: VisualFrame[]
 }
 
 interface UseGameOptions {
@@ -81,6 +85,10 @@ interface UseGameOptions {
 }
 
 const GAME_MODE: GameMode = 'classic'
+// We keep replay capture lightweight: authoritative frames for exact results and visual frames
+// capped around 30fps, instead of storing 60 full board snapshots per second like a video.
+const VISUAL_CAPTURE_INTERVAL_MS = 1000 / 30
+const KEYFRAME_VISUAL_EVENTS = new Set<VisualFrameEvent>(['start', 'lock', 'lineClear', 'gameOver', 'hardDrop'])
 
 const createGameStats = (highScore: number, startLevel: number, seed: string): GameStats => {
   return {
@@ -159,6 +167,216 @@ const createGameResult = (stats: GameStats, endedAt: string): GameResult => {
   }
 }
 
+const cloneBoard = (board: BoardMatrix): BoardMatrix => {
+  return board.map((row) => [...row])
+}
+
+const shapesEqual = (left: number[][], right: number[][]): boolean => {
+  if (left.length !== right.length) {
+    return false
+  }
+
+  for (let rowIndex = 0; rowIndex < left.length; rowIndex += 1) {
+    if (left[rowIndex].length !== right[rowIndex].length) {
+      return false
+    }
+    for (let columnIndex = 0; columnIndex < left[rowIndex].length; columnIndex += 1) {
+      if (left[rowIndex][columnIndex] !== right[rowIndex][columnIndex]) {
+        return false
+      }
+    }
+  }
+
+  return true
+}
+
+const getPieceRotation = (piece: ActivePiece): number => {
+  let candidate = TETROMINO_SHAPES[piece.type]
+  for (let rotation = 0; rotation < 4; rotation += 1) {
+    if (shapesEqual(candidate, piece.shape)) {
+      return rotation
+    }
+    candidate = rotateClockwise(candidate)
+  }
+
+  return 0
+}
+
+const createVisualPieceSnapshot = (piece: ActivePiece | null): VisualPieceSnapshot | null => {
+  if (!piece) {
+    return null
+  }
+
+  return {
+    type: piece.type,
+    x: piece.x,
+    y: piece.y,
+    rotation: getPieceRotation(piece),
+  }
+}
+
+const samePieceSnapshot = (
+  left: VisualPieceSnapshot | null | undefined,
+  right: VisualPieceSnapshot | null | undefined,
+): boolean => {
+  if (!left && !right) {
+    return true
+  }
+  if (!left || !right) {
+    return false
+  }
+
+  return (
+    left.type === right.type &&
+    left.x === right.x &&
+    left.y === right.y &&
+    left.rotation === right.rotation
+  )
+}
+
+const sameBoard = (left: BoardMatrix, right: BoardMatrix): boolean => {
+  if (left.length !== right.length) {
+    return false
+  }
+
+  for (let rowIndex = 0; rowIndex < left.length; rowIndex += 1) {
+    if (left[rowIndex].length !== right[rowIndex].length) {
+      return false
+    }
+    for (let columnIndex = 0; columnIndex < left[rowIndex].length; columnIndex += 1) {
+      if (left[rowIndex][columnIndex] !== right[rowIndex][columnIndex]) {
+        return false
+      }
+    }
+  }
+
+  return true
+}
+
+const createReplayFrame = ({
+  type,
+  tick,
+  timeMs,
+  board,
+  stats,
+  combo,
+  currentPiece,
+  nextPiece,
+  grade,
+  rating,
+}: {
+  type: ReplayFrame['type']
+  tick: number
+  timeMs: number
+  board: BoardMatrix
+  stats: Pick<GameStats, 'score' | 'lines' | 'piecesPlaced' | 'level'>
+  combo: number
+  currentPiece?: TetrominoType | null
+  nextPiece?: TetrominoType | null
+  grade?: GameResult['grade']
+  rating?: number
+}): ReplayFrame => {
+  return {
+    type,
+    tick,
+    timeMs: Math.max(0, Math.round(timeMs)),
+    board: cloneBoard(board),
+    score: stats.score,
+    linesCleared: stats.lines,
+    piecesPlaced: stats.piecesPlaced,
+    level: stats.level,
+    combo,
+    currentPiece: currentPiece ?? null,
+    nextPiece: nextPiece ?? null,
+    grade,
+    rating,
+  }
+}
+
+const createVisualFrame = ({
+  timeMs,
+  tick,
+  board,
+  activePiece,
+  ghostPiece,
+  nextPiece,
+  stats,
+  combo,
+  grade,
+  rating,
+  event,
+}: {
+  timeMs: number
+  tick: number
+  board: BoardMatrix
+  activePiece: ActivePiece | null
+  ghostPiece: ActivePiece | null
+  nextPiece: TetrominoType | null
+  stats: Pick<GameStats, 'score' | 'lines' | 'piecesPlaced' | 'level'>
+  combo: number
+  grade?: GameResult['grade']
+  rating?: number
+  event?: VisualFrameEvent
+}): VisualFrame => {
+  return {
+    timeMs: Math.max(0, Math.round(timeMs)),
+    tick,
+    board: cloneBoard(board),
+    activePiece: createVisualPieceSnapshot(activePiece),
+    ghostPiece: createVisualPieceSnapshot(ghostPiece),
+    nextPiece,
+    score: stats.score,
+    linesCleared: stats.lines,
+    piecesPlaced: stats.piecesPlaced,
+    level: stats.level,
+    combo,
+    grade,
+    rating,
+    event,
+  }
+}
+
+const sameVisualState = (left: VisualFrame, right: VisualFrame): boolean => {
+  return (
+    sameBoard(left.board, right.board) &&
+    samePieceSnapshot(left.activePiece, right.activePiece) &&
+    samePieceSnapshot(left.ghostPiece, right.ghostPiece) &&
+    left.nextPiece === right.nextPiece &&
+    left.score === right.score &&
+    left.linesCleared === right.linesCleared &&
+    left.piecesPlaced === right.piecesPlaced &&
+    left.level === right.level &&
+    left.combo === right.combo &&
+    (left.grade ?? null) === (right.grade ?? null) &&
+    (left.rating ?? null) === (right.rating ?? null)
+  )
+}
+
+const appendVisualFrame = (
+  frames: VisualFrame[],
+  nextFrame: VisualFrame,
+  options?: { force?: boolean },
+): VisualFrame[] => {
+  const lastFrame = frames.at(-1)
+  if (!lastFrame) {
+    return [nextFrame]
+  }
+
+  if (sameVisualState(lastFrame, nextFrame)) {
+    return frames
+  }
+
+  const force = options?.force ?? false
+  const lastIsKeyframe = lastFrame.event ? KEYFRAME_VISUAL_EVENTS.has(lastFrame.event) : false
+  const nextIsKeyframe = nextFrame.event ? KEYFRAME_VISUAL_EVENTS.has(nextFrame.event) : false
+
+  if (!force && !lastIsKeyframe && !nextIsKeyframe && nextFrame.timeMs - lastFrame.timeMs < VISUAL_CAPTURE_INTERVAL_MS) {
+    return [...frames.slice(0, -1), nextFrame]
+  }
+
+  return [...frames, nextFrame]
+}
+
 const createInitialModel = (startLevel: number): GameModel => {
   const highScore = getHighScore()
   const seed = generateGameSeed()
@@ -191,6 +409,8 @@ const createInitialModel = (startLevel: number): GameModel => {
     lastLockFeedback: null,
     completedGameResult: null,
     tick: 0,
+    replayFrames: [],
+    visualReplayFrames: [],
   }
 }
 
@@ -263,6 +483,51 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
       )
 
       const completedGameResult = stepped.gameOver ? createGameResult(statsWithLock, endedAt) : null
+      const pieceLockedFrame = createReplayFrame({
+        type: 'pieceLocked',
+        tick: prev.tick,
+        timeMs: statsWithLock.timePlayedMs,
+        board: stepped.clearedLines > 0 && animationsEnabled ? stepped.mergedBoard : stepped.board,
+        stats: statsWithLock,
+        combo: chains.combo.count,
+        currentPiece:
+          stepped.clearedLines > 0 && animationsEnabled ? null : (stepped.activePiece?.type ?? null),
+        nextPiece: stepped.nextPieceType,
+      })
+      const settledReplayFrames = [...prev.replayFrames, pieceLockedFrame]
+      const visualEvent: VisualFrameEvent = wasHardDrop ? 'hardDrop' : 'lock'
+      const settledVisualReplayFrames =
+        stepped.clearedLines > 0 && animationsEnabled
+          ? appendVisualFrame(
+              prev.visualReplayFrames,
+              createVisualFrame({
+                timeMs: statsWithLock.timePlayedMs,
+                tick: prev.tick,
+                board: stepped.mergedBoard,
+                activePiece: null,
+                ghostPiece: null,
+                nextPiece: stepped.nextPieceType,
+                stats: statsWithLock,
+                combo: chains.combo.count,
+                event: 'lineClear',
+              }),
+              { force: true },
+            )
+          : appendVisualFrame(
+              prev.visualReplayFrames,
+              createVisualFrame({
+                timeMs: statsWithLock.timePlayedMs,
+                tick: prev.tick,
+                board: stepped.board,
+                activePiece: stepped.gameOver ? null : stepped.activePiece,
+                ghostPiece: stepped.gameOver ? null : projectGhostPiece(stepped.board, stepped.activePiece),
+                nextPiece: stepped.nextPieceType,
+                stats: statsWithLock,
+                combo: chains.combo.count,
+                event: visualEvent,
+              }),
+              { force: true },
+            )
       const base: GameModel = {
         ...prev,
         nextPieceType: stepped.nextPieceType,
@@ -276,6 +541,8 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
         gameOverFlashKey: stepped.gameOver ? prev.gameOverFlashKey + 1 : prev.gameOverFlashKey,
         lastLockFeedback: feedback,
         completedGameResult,
+        replayFrames: settledReplayFrames,
+        visualReplayFrames: settledVisualReplayFrames,
       }
 
       if (stepped.clearedLines > 0 && animationsEnabled) {
@@ -293,6 +560,49 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
             state: nextState,
           },
           state: 'PLAYING',
+        }
+      }
+
+      if (stepped.gameOver && completedGameResult) {
+        return {
+          ...base,
+          board: stepped.board,
+          activePiece: stepped.activePiece,
+          ghostPiece: projectGhostPiece(stepped.board, stepped.activePiece),
+          pendingSpawn: null,
+          lineClearRows: [],
+          state: nextState,
+          replayFrames: [
+            ...settledReplayFrames,
+            createReplayFrame({
+              type: 'gameOver',
+              tick: prev.tick,
+              timeMs: statsWithLock.timePlayedMs,
+              board: stepped.board,
+              stats: statsWithLock,
+              combo: chains.combo.count,
+              currentPiece: null,
+              nextPiece: stepped.nextPieceType,
+              grade: completedGameResult.grade,
+              rating: completedGameResult.rating,
+            }),
+          ],
+          visualReplayFrames: [
+            ...settledVisualReplayFrames,
+            createVisualFrame({
+              timeMs: statsWithLock.timePlayedMs,
+              tick: prev.tick,
+              board: stepped.board,
+              activePiece: stepped.activePiece,
+              ghostPiece: projectGhostPiece(stepped.board, stepped.activePiece),
+              nextPiece: stepped.nextPieceType,
+              stats: statsWithLock,
+              combo: chains.combo.count,
+              grade: completedGameResult.grade,
+              rating: completedGameResult.rating,
+              event: 'gameOver',
+            }),
+          ],
         }
       }
 
@@ -319,6 +629,27 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
         const prepared = prepareNewRun(seed)
         const board = createEmptyBoard()
         const stats = createGameStats(prev.stats.highScore, startLevel, seed)
+        const startFrame = createReplayFrame({
+          type: 'start',
+          tick: 0,
+          timeMs: 0,
+          board,
+          stats,
+          combo: 0,
+          currentPiece: prepared.activePiece.type,
+          nextPiece: prepared.nextPieceType,
+        })
+        const startVisualFrame = createVisualFrame({
+          timeMs: 0,
+          tick: 0,
+          board,
+          activePiece: prepared.activePiece,
+          ghostPiece: projectGhostPiece(board, prepared.activePiece),
+          nextPiece: prepared.nextPieceType,
+          stats,
+          combo: 0,
+          event: 'start',
+        })
 
         return {
           ...prev,
@@ -345,6 +676,8 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
           lastLockFeedback: null,
           completedGameResult: null,
           tick: 0,
+          replayFrames: [startFrame],
+          visualReplayFrames: [startVisualFrame],
         }
       })
     },
@@ -392,6 +725,7 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
 
   const moveLeft = useCallback((): boolean => {
     let changed = false
+    const nowMs = typeof performance !== 'undefined' ? performance.now() : 0
     setModel((prev) => {
       if (prev.state !== 'PLAYING' || !prev.activePiece) {
         return prev
@@ -401,10 +735,25 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
         return prev
       }
       changed = true
+      const ghostPiece = projectGhostPiece(prev.board, moved)
       return {
         ...prev,
         activePiece: moved,
-        ghostPiece: projectGhostPiece(prev.board, moved),
+        ghostPiece,
+        visualReplayFrames: appendVisualFrame(
+          prev.visualReplayFrames,
+          createVisualFrame({
+            timeMs: getElapsedTimeMs(prev.timing, nowMs),
+            tick: prev.tick,
+            board: prev.board,
+            activePiece: moved,
+            ghostPiece,
+            nextPiece: prev.nextPieceType,
+            stats: prev.stats,
+            combo: prev.comboState.count,
+            event: 'input',
+          }),
+        ),
       }
     })
     return changed
@@ -412,6 +761,7 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
 
   const moveRight = useCallback((): boolean => {
     let changed = false
+    const nowMs = typeof performance !== 'undefined' ? performance.now() : 0
     setModel((prev) => {
       if (prev.state !== 'PLAYING' || !prev.activePiece) {
         return prev
@@ -421,10 +771,25 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
         return prev
       }
       changed = true
+      const ghostPiece = projectGhostPiece(prev.board, moved)
       return {
         ...prev,
         activePiece: moved,
-        ghostPiece: projectGhostPiece(prev.board, moved),
+        ghostPiece,
+        visualReplayFrames: appendVisualFrame(
+          prev.visualReplayFrames,
+          createVisualFrame({
+            timeMs: getElapsedTimeMs(prev.timing, nowMs),
+            tick: prev.tick,
+            board: prev.board,
+            activePiece: moved,
+            ghostPiece,
+            nextPiece: prev.nextPieceType,
+            stats: prev.stats,
+            combo: prev.comboState.count,
+            event: 'input',
+          }),
+        ),
       }
     })
     return changed
@@ -432,6 +797,7 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
 
   const rotateCW = useCallback((): boolean => {
     let changed = false
+    const nowMs = typeof performance !== 'undefined' ? performance.now() : 0
     setModel((prev) => {
       if (prev.state !== 'PLAYING' || !prev.activePiece) {
         return prev
@@ -441,14 +807,29 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
         return prev
       }
       changed = true
+      const ghostPiece = projectGhostPiece(prev.board, rotated)
       return {
         ...prev,
         activePiece: rotated,
-        ghostPiece: projectGhostPiece(prev.board, rotated),
+        ghostPiece,
         stats: {
           ...prev.stats,
           rotationsUsed: prev.stats.rotationsUsed + 1,
         },
+        visualReplayFrames: appendVisualFrame(
+          prev.visualReplayFrames,
+          createVisualFrame({
+            timeMs: getElapsedTimeMs(prev.timing, nowMs),
+            tick: prev.tick,
+            board: prev.board,
+            activePiece: rotated,
+            ghostPiece,
+            nextPiece: prev.nextPieceType,
+            stats: prev.stats,
+            combo: prev.comboState.count,
+            event: 'rotate',
+          }),
+        ),
       }
     })
     return changed
@@ -456,6 +837,7 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
 
   const rotateCCW = useCallback((): boolean => {
     let changed = false
+    const nowMs = typeof performance !== 'undefined' ? performance.now() : 0
     setModel((prev) => {
       if (prev.state !== 'PLAYING' || !prev.activePiece) {
         return prev
@@ -465,14 +847,29 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
         return prev
       }
       changed = true
+      const ghostPiece = projectGhostPiece(prev.board, rotated)
       return {
         ...prev,
         activePiece: rotated,
-        ghostPiece: projectGhostPiece(prev.board, rotated),
+        ghostPiece,
         stats: {
           ...prev.stats,
           rotationsUsed: prev.stats.rotationsUsed + 1,
         },
+        visualReplayFrames: appendVisualFrame(
+          prev.visualReplayFrames,
+          createVisualFrame({
+            timeMs: getElapsedTimeMs(prev.timing, nowMs),
+            tick: prev.tick,
+            board: prev.board,
+            activePiece: rotated,
+            ghostPiece,
+            nextPiece: prev.nextPieceType,
+            stats: prev.stats,
+            combo: prev.comboState.count,
+            event: 'rotate',
+          }),
+        ),
       }
     })
     return changed
@@ -493,16 +890,32 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
         changed = true
         const scoreDelta = softDropScore(1)
         const score = prev.stats.score + scoreDelta
+        const ghostPiece = projectGhostPiece(prev.board, moved)
+        const nextStats = {
+          ...prev.stats,
+          score,
+          highScore: Math.max(prev.stats.highScore, score),
+          softDropsUsed: prev.stats.softDropsUsed + 1,
+        }
         return {
           ...prev,
           activePiece: moved,
-          ghostPiece: projectGhostPiece(prev.board, moved),
-          stats: {
-            ...prev.stats,
-            score,
-            highScore: Math.max(prev.stats.highScore, score),
-            softDropsUsed: prev.stats.softDropsUsed + 1,
-          },
+          ghostPiece,
+          stats: nextStats,
+          visualReplayFrames: appendVisualFrame(
+            prev.visualReplayFrames,
+            createVisualFrame({
+              timeMs: getElapsedTimeMs(prev.timing, nowMs),
+              tick: prev.tick,
+              board: prev.board,
+              activePiece: moved,
+              ghostPiece,
+              nextPiece: prev.nextPieceType,
+              stats: nextStats,
+              combo: prev.comboState.count,
+              event: 'softDrop',
+            }),
+          ),
         }
       }
 
@@ -664,6 +1077,67 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
 
         const pending = prev.pendingSpawn
         const resolvedState: GameState = prev.state === 'PAUSED' ? 'PAUSED' : pending.state
+        const lineClearTimeMs = prev.stats.timePlayedMs + LINE_CLEAR_ANIMATION_MS
+        const lineClearFrame = createReplayFrame({
+          type: 'lineClear',
+          tick: prev.tick,
+          timeMs: lineClearTimeMs,
+          board: pending.board,
+          stats: prev.stats,
+          combo: prev.comboState.count,
+          currentPiece: pending.activePiece?.type ?? null,
+          nextPiece: pending.nextPieceType,
+        })
+        const lineClearVisualFrame = createVisualFrame({
+          timeMs: lineClearTimeMs,
+          tick: prev.tick,
+          board: pending.board,
+          activePiece: pending.activePiece,
+          ghostPiece: projectGhostPiece(pending.board, pending.activePiece),
+          nextPiece: pending.nextPieceType,
+          stats: prev.stats,
+          combo: prev.comboState.count,
+          event: 'lineClear',
+        })
+        const replayFrames =
+          resolvedState === 'GAME_OVER' && prev.completedGameResult
+            ? [
+                ...prev.replayFrames,
+                lineClearFrame,
+                createReplayFrame({
+                  type: 'gameOver',
+                  tick: prev.tick,
+                  timeMs: lineClearTimeMs,
+                  board: pending.board,
+                  stats: prev.stats,
+                  combo: prev.comboState.count,
+                  currentPiece: null,
+                  nextPiece: pending.nextPieceType,
+                  grade: prev.completedGameResult.grade,
+                  rating: prev.completedGameResult.rating,
+                }),
+              ]
+            : [...prev.replayFrames, lineClearFrame]
+        const visualReplayFrames =
+          resolvedState === 'GAME_OVER' && prev.completedGameResult
+            ? [
+                ...appendVisualFrame(prev.visualReplayFrames, lineClearVisualFrame, { force: true }),
+                createVisualFrame({
+                  timeMs: lineClearTimeMs,
+                  tick: prev.tick,
+                  board: pending.board,
+                  activePiece: pending.activePiece,
+                  ghostPiece: projectGhostPiece(pending.board, pending.activePiece),
+                  nextPiece: pending.nextPieceType,
+                  stats: prev.stats,
+                  combo: prev.comboState.count,
+                  grade: prev.completedGameResult.grade,
+                  rating: prev.completedGameResult.rating,
+                  event: 'gameOver',
+                }),
+              ]
+            : appendVisualFrame(prev.visualReplayFrames, lineClearVisualFrame, { force: true })
+
         return {
           ...prev,
           board: pending.board,
@@ -674,6 +1148,8 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
           state: resolvedState,
           pendingSpawn: null,
           lineClearRows: [],
+          replayFrames,
+          visualReplayFrames,
         }
       })
     }, LINE_CLEAR_ANIMATION_MS)
@@ -696,11 +1172,26 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
           }
           const moved = movePiece(prev.board, prev.activePiece, 0, 1)
           if (moved) {
+            const ghostPiece = projectGhostPiece(prev.board, moved)
             return {
               ...prev,
               activePiece: moved,
-              ghostPiece: projectGhostPiece(prev.board, moved),
+              ghostPiece,
               tick: prev.tick + 1,
+              visualReplayFrames: appendVisualFrame(
+                prev.visualReplayFrames,
+                createVisualFrame({
+                  timeMs: getElapsedTimeMs(prev.timing, ts),
+                  tick: prev.tick + 1,
+                  board: prev.board,
+                  activePiece: moved,
+                  ghostPiece,
+                  nextPiece: prev.nextPieceType,
+                  stats: prev.stats,
+                  combo: prev.comboState.count,
+                  event: 'gravity',
+                }),
+              ),
             }
           }
 
@@ -743,6 +1234,8 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
     lastLockFeedback: model.lastLockFeedback,
     completedGameResult: model.completedGameResult,
     tick: model.tick,
+    replayFrames: model.replayFrames,
+    visualReplayFrames: model.visualReplayFrames,
     isNewRecord,
     startGame,
     restartGame,
