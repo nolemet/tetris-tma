@@ -3,6 +3,7 @@ import { FEEDBACK_ANIMATION_MS, BOARD_LOCK_FLASH_MS, HARD_DROP_FLASH_MS } from '
 import { Board } from './components/Board'
 import { ControlPad } from './components/ControlPad'
 import { GameFeedback } from './components/GameFeedback'
+import { GameAnalysisPanel } from './components/GameAnalysisPanel'
 import { GameHistoryPanel } from './components/GameHistoryPanel'
 import { GameModesPanel } from './components/GameModesPanel'
 import { MainMenu } from './components/MainMenu'
@@ -21,6 +22,7 @@ import { useGame } from './hooks/useGame'
 import { useTelegram } from './hooks/useTelegram'
 import { createReplayRecorder, finalizeReplay, recordReplayAction, type ReplayRecorderSession } from './replays/recorder'
 import { clearReplays, loadReplays, saveReplay } from './replays/replayStorage'
+import { isReplayV3 } from './replays/types'
 import { createDefaultKeybinds } from './settings/keybinds'
 import { clearGameHistory, loadGameHistory, saveGameResult } from './settings/gameHistoryStorage'
 import { loadSettings, resetSettings, updateSettings } from './settings/storage'
@@ -31,7 +33,7 @@ import type { GameAction, GameSettings } from './types'
 import { shareResult } from './utils/share'
 import styles from './App.module.css'
 
-type AppScreen = 'menu' | 'game' | 'modes' | 'settings' | 'history' | 'replay' | 'skins' | 'profile'
+type AppScreen = 'menu' | 'game' | 'modes' | 'settings' | 'history' | 'replay' | 'skins' | 'profile' | 'analysis'
 
 function App() {
   const { webApp, user } = useTelegram()
@@ -40,6 +42,7 @@ function App() {
   const [replays, setReplays] = useState(() => loadReplays())
   const [screen, setScreen] = useState<AppScreen>('menu')
   const [selectedReplayId, setSelectedReplayId] = useState<string | null>(null)
+  const [latestCompletedReplayId, setLatestCompletedReplayId] = useState<string | null>(null)
   const game = useGame({
     startLevel: settings.gameplay.startLevel,
     animationsEnabled: settings.visual.animations,
@@ -62,9 +65,17 @@ function App() {
   const showHoldPreviewInCurrentMode =
     holdEnabledInCurrentMode && CLASSIC_MODE_CONFIG.showHoldPreview && settings.gameplay.showHoldPiece
   const availableReplayIds = useMemo(() => new Set(replays.map((replay) => replay.id)), [replays])
+  const availableAnalysisIds = useMemo(
+    () => new Set(replays.filter((replay) => isReplayV3(replay) && replay.moveEvents.length > 0).map((replay) => replay.id)),
+    [replays],
+  )
   const selectedReplay = useMemo(
     () => replays.find((replay) => replay.id === selectedReplayId) ?? null,
     [replays, selectedReplayId],
+  )
+  const latestCompletedReplay = useMemo(
+    () => replays.find((replay) => replay.id === latestCompletedReplayId) ?? null,
+    [latestCompletedReplayId, replays],
   )
 
   useEffect(() => {
@@ -175,9 +186,11 @@ function App() {
         Date.now(),
         game.replayFrames,
         game.visualReplayFrames,
+        game.moveReplayEvents,
       )
       setReplays(saveReplay(replay))
       replayId = replay.id
+      setLatestCompletedReplayId(replay.id)
       activeReplayRef.current = null
     }
 
@@ -188,7 +201,7 @@ function App() {
       }),
     )
     savedResultIdRef.current = game.completedGameResult.id
-  }, [game.completedGameResult, game.replayFrames, game.state, game.visualReplayFrames])
+  }, [game.completedGameResult, game.moveReplayEvents, game.replayFrames, game.state, game.visualReplayFrames])
 
   const playButtonClick = useCallback(() => {
     soundManager.play('buttonClick', settings.sound)
@@ -204,6 +217,8 @@ function App() {
         startedAt: Date.now(),
       })
       savedResultIdRef.current = null
+      setLatestCompletedReplayId(null)
+      setSelectedReplayId(null)
       setFeedbackMessages([])
       startCoreGame(seed)
       if (navigateToGame) {
@@ -357,6 +372,23 @@ function App() {
     [playButtonClick],
   )
 
+  const onOpenAnalysis = useCallback(
+    (replayId: string) => {
+      playButtonClick()
+      setSelectedReplayId(replayId)
+      setScreen('analysis')
+    },
+    [playButtonClick],
+  )
+
+  const onOpenLatestAnalysis = useCallback(() => {
+    if (!latestCompletedReplayId) {
+      return
+    }
+
+    onOpenAnalysis(latestCompletedReplayId)
+  }, [latestCompletedReplayId, onOpenAnalysis])
+
   const onBackToHistory = useCallback(() => {
     playButtonClick()
     setScreen('history')
@@ -368,6 +400,7 @@ function App() {
     setHistory([])
     setReplays([])
     setSelectedReplayId(null)
+    setLatestCompletedReplayId(null)
   }, [])
 
   const onSelectSkin = useCallback(
@@ -447,7 +480,9 @@ function App() {
           <GameHistoryPanel
             history={history}
             availableReplayIds={availableReplayIds}
+            availableAnalysisIds={availableAnalysisIds}
             onOpenReplay={onOpenReplay}
+            onOpenAnalysis={onOpenAnalysis}
             onBack={onBackToMenu}
             onClearHistory={onClearStoredHistory}
           />
@@ -480,6 +515,20 @@ function App() {
           />
         ) : null}
 
+        {screen === 'analysis' ? (
+          <GameAnalysisPanel
+            replay={selectedReplay}
+            pieceColors={selectedSkinPreset.pieceColors}
+            onOpenReplay={() => {
+              if (selectedReplayId) {
+                onOpenReplay(selectedReplayId)
+              }
+            }}
+            onBackToHistory={onBackToHistory}
+            onBackToMenu={onBackToMenu}
+          />
+        ) : null}
+
         {screen === 'game' ? (
           <>
             <section ref={sectionRef} className={styles.boardSection}>
@@ -507,10 +556,14 @@ function App() {
                         lines={game.stats.lines}
                         isNewRecord={game.isNewRecord}
                         gameResult={game.completedGameResult}
+                        analysisAvailable={Boolean(
+                          latestCompletedReplay && isReplayV3(latestCompletedReplay) && latestCompletedReplay.moveEvents.length > 0,
+                        )}
                         onStart={onStartGame}
                         onResume={onTogglePause}
                         onRestart={onRestartGame}
                         onShare={handleShareResult}
+                        onOpenAnalysis={onOpenLatestAnalysis}
                       />
                     </div>
                     <div className={styles.sideHud}>

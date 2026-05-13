@@ -1,5 +1,5 @@
 import type { GameAction, GameMode, GameResult } from '../types'
-import type { GameReplayV3, ReplayFrame, ReplayInput, VisualFrame } from './types'
+import type { GameReplayV3, ReplayFrame, ReplayInput, ReplayMoveEvent, VisualFrame } from './types'
 
 interface ReplayRecorderSetup {
   mode: GameMode
@@ -29,12 +29,14 @@ const resolveReplayDurationMs = (
   inputs: ReplayInput[],
   frames: ReplayFrame[],
   visualFrames: VisualFrame[],
+  moveEvents: ReplayMoveEvent[],
 ): number => {
   const latestInputTime = inputs.at(-1)?.timeMs ?? 0
   const latestFrameTime = frames.at(-1)?.timeMs ?? 0
   const latestVisualFrameTime = visualFrames.at(-1)?.timeMs ?? 0
+  const latestMoveEventTime = moveEvents.at(-1)?.lockTimeMs ?? 0
 
-  return Math.max(Math.round(gameResultDurationMs), latestInputTime, latestFrameTime, latestVisualFrameTime)
+  return Math.max(Math.round(gameResultDurationMs), latestInputTime, latestFrameTime, latestVisualFrameTime, latestMoveEventTime)
 }
 
 export const createReplayRecorder = ({
@@ -80,8 +82,9 @@ export const finalizeReplay = (
   finishedAt: number,
   frames: ReplayFrame[],
   visualFrames: VisualFrame[],
+  moveEvents: ReplayMoveEvent[],
 ): GameReplayV3 => {
-  const durationMs = resolveReplayDurationMs(gameResult.timePlayedMs, recorder.inputs, frames, visualFrames)
+  const durationMs = resolveReplayDurationMs(gameResult.timePlayedMs, recorder.inputs, frames, visualFrames, moveEvents)
 
   return {
     version: 3,
@@ -96,6 +99,14 @@ export const finalizeReplay = (
     inputs: recorder.inputs,
     frames: frames.map((frame) => cloneBoard(frame)),
     visualFrames: visualFrames.map((frame) => cloneBoard(frame)),
+    moveEvents: moveEvents.map((moveEvent) => ({
+      ...moveEvent,
+      boardBefore: moveEvent.boardBefore.map((row) => [...row]),
+      boardAfter: moveEvent.boardAfter.map((row) => [...row]),
+      playerPlacement: {
+        ...moveEvent.playerPlacement,
+      },
+    })),
     finalStats: {
       score: gameResult.score,
       linesCleared: gameResult.lines,

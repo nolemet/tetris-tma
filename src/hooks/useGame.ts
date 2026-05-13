@@ -21,7 +21,7 @@ import {
   spawnNextPiece,
 } from '../game/engine'
 import { calculateLockScore, levelByLines, softDropScore, tickMsByLevel } from '../game/scoring'
-import type { ReplayFrame, VisualFrame, VisualFrameEvent, VisualPieceSnapshot } from '../replays/types'
+import type { ReplayFrame, ReplayMoveEvent, VisualFrame, VisualFrameEvent, VisualPieceSnapshot } from '../replays/types'
 import { createPiece, rotateClockwise } from '../utils/piece'
 import { getHighScore, setHighScore } from '../utils/storage'
 import type { ActivePiece, BoardMatrix, GameAction, GameMode, GameResult, GameState, GameStats, TetrominoType } from '../types'
@@ -52,6 +52,15 @@ export interface LockFeedback {
   gameOver: boolean
 }
 
+interface ActiveMoveReplaySeed {
+  pieceIndex: number
+  pieceType: TetrominoType
+  nextPieceType: TetrominoType | null
+  boardBefore: BoardMatrix
+  spawnTick: number
+  spawnTimeMs: number
+}
+
 interface GameModel {
   board: BoardMatrix
   activePiece: ActivePiece | null
@@ -77,6 +86,8 @@ interface GameModel {
   tick: number
   replayFrames: ReplayFrame[]
   visualReplayFrames: VisualFrame[]
+  moveReplayEvents: ReplayMoveEvent[]
+  activeMoveReplaySeed: ActiveMoveReplaySeed | null
 }
 
 interface UseGameOptions {
@@ -169,6 +180,83 @@ const createGameResult = (stats: GameStats, endedAt: string): GameResult => {
 
 const cloneBoard = (board: BoardMatrix): BoardMatrix => {
   return board.map((row) => [...row])
+}
+
+const createActiveMoveReplaySeed = ({
+  board,
+  activePiece,
+  nextPieceType,
+  pieceIndex,
+  spawnTick,
+  spawnTimeMs,
+}: {
+  board: BoardMatrix
+  activePiece: ActivePiece | null
+  nextPieceType: TetrominoType | null
+  pieceIndex: number
+  spawnTick: number
+  spawnTimeMs: number
+}): ActiveMoveReplaySeed | null => {
+  if (!activePiece) {
+    return null
+  }
+
+  return {
+    pieceIndex,
+    pieceType: activePiece.type,
+    nextPieceType,
+    boardBefore: cloneBoard(board),
+    spawnTick,
+    spawnTimeMs: Math.max(0, Math.round(spawnTimeMs)),
+  }
+}
+
+const createReplayMoveEvent = ({
+  seed,
+  moveSeed,
+  lockedPiece,
+  boardAfter,
+  lockTick,
+  lockTimeMs,
+  linesCleared,
+  scoreAfter,
+  levelAfter,
+  comboAfter,
+}: {
+  seed: string
+  moveSeed: ActiveMoveReplaySeed
+  lockedPiece: ActivePiece
+  boardAfter: BoardMatrix
+  lockTick: number
+  lockTimeMs: number
+  linesCleared: number
+  scoreAfter: number
+  levelAfter: number
+  comboAfter: number
+}): ReplayMoveEvent => {
+  return {
+    id: `${seed}-move-${moveSeed.pieceIndex}-${Math.max(0, Math.round(lockTimeMs))}`,
+    pieceIndex: moveSeed.pieceIndex,
+    pieceType: moveSeed.pieceType,
+    nextPieceType: moveSeed.nextPieceType,
+    boardBefore: cloneBoard(moveSeed.boardBefore),
+    boardAfter: cloneBoard(boardAfter),
+    spawnTick: moveSeed.spawnTick,
+    lockTick,
+    spawnTimeMs: moveSeed.spawnTimeMs,
+    lockTimeMs: Math.max(0, Math.round(lockTimeMs)),
+    playerPlacement: {
+      pieceType: lockedPiece.type,
+      x: lockedPiece.x,
+      y: lockedPiece.y,
+      rotation: getPieceRotation(lockedPiece),
+      linesCleared,
+    },
+    linesCleared,
+    scoreAfter,
+    levelAfter,
+    comboAfter,
+  }
 }
 
 const shapesEqual = (left: number[][], right: number[][]): boolean => {
@@ -411,6 +499,8 @@ const createInitialModel = (startLevel: number): GameModel => {
     tick: 0,
     replayFrames: [],
     visualReplayFrames: [],
+    moveReplayEvents: [],
+    activeMoveReplaySeed: null,
   }
 }
 
@@ -426,6 +516,7 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
       lockedPiece: ActivePiece,
       hardDropDistance: number,
       wasHardDrop: boolean,
+      lockTick: number,
       nowMs: number,
       endedAt: string,
     ): GameModel => {
@@ -481,6 +572,45 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
         prev.timing,
         nowMs,
       )
+
+      const moveSeed =
+        prev.activeMoveReplaySeed ??
+        createActiveMoveReplaySeed({
+          board: prev.board,
+          activePiece: lockedPiece,
+          nextPieceType: prev.nextPieceType,
+          pieceIndex: prev.stats.piecesPlaced + 1,
+          spawnTick: prev.tick,
+          spawnTimeMs: statsWithLock.timePlayedMs,
+        })
+      const nextMoveReplaySeed =
+        stepped.clearedLines > 0 && animationsEnabled
+          ? null
+          : createActiveMoveReplaySeed({
+              board: stepped.board,
+              activePiece: stepped.gameOver ? null : stepped.activePiece,
+              nextPieceType: stepped.nextPieceType,
+              pieceIndex: statsWithLock.piecesPlaced + 1,
+              spawnTick: lockTick,
+              spawnTimeMs: statsWithLock.timePlayedMs,
+            })
+      const nextMoveReplayEvents = moveSeed
+        ? [
+            ...prev.moveReplayEvents,
+            createReplayMoveEvent({
+              seed: prev.stats.seed,
+              moveSeed,
+              lockedPiece,
+              boardAfter: stepped.board,
+              lockTick,
+              lockTimeMs: statsWithLock.timePlayedMs,
+              linesCleared: stepped.clearedLines,
+              scoreAfter: statsWithLock.score,
+              levelAfter: statsWithLock.level,
+              comboAfter: chains.combo.count,
+            }),
+          ]
+        : prev.moveReplayEvents
 
       const completedGameResult = stepped.gameOver ? createGameResult(statsWithLock, endedAt) : null
       const pieceLockedFrame = createReplayFrame({
@@ -543,6 +673,8 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
         completedGameResult,
         replayFrames: settledReplayFrames,
         visualReplayFrames: settledVisualReplayFrames,
+        moveReplayEvents: nextMoveReplayEvents,
+        activeMoveReplaySeed: nextMoveReplaySeed,
       }
 
       if (stepped.clearedLines > 0 && animationsEnabled) {
@@ -603,6 +735,7 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
               event: 'gameOver',
             }),
           ],
+          activeMoveReplaySeed: null,
         }
       }
 
@@ -678,6 +811,15 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
           tick: 0,
           replayFrames: [startFrame],
           visualReplayFrames: [startVisualFrame],
+          moveReplayEvents: [],
+          activeMoveReplaySeed: createActiveMoveReplaySeed({
+            board,
+            activePiece: prepared.activePiece,
+            nextPieceType: prepared.nextPieceType,
+            pieceIndex: 1,
+            spawnTick: 0,
+            spawnTimeMs: 0,
+          }),
         }
       })
     },
@@ -919,7 +1061,7 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
         }
       }
 
-      return resolveLock(prev, prev.activePiece, 0, false, nowMs, endedAt)
+      return resolveLock(prev, prev.activePiece, 0, false, prev.tick, nowMs, endedAt)
     })
     return changed
   }, [resolveLock])
@@ -947,7 +1089,7 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
       }
 
       changed = true
-      return resolveLock(prev, droppedPiece, distance, true, nowMs, endedAt)
+      return resolveLock(prev, droppedPiece, distance, true, prev.tick, nowMs, endedAt)
     })
     return changed
   }, [resolveLock])
@@ -983,6 +1125,7 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
             completedGameResult: createGameResult(finalizedStats, endedAt),
             gameOverFlashKey: prev.gameOverFlashKey + 1,
             lastLockFeedback: null,
+            activeMoveReplaySeed: null,
           }
         }
 
@@ -994,6 +1137,14 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
           heldPieceType: prev.activePiece.type,
           canHold: false,
           stats: nextStats,
+          activeMoveReplaySeed: createActiveMoveReplaySeed({
+            board: prev.board,
+            activePiece: swappedPiece,
+            nextPieceType: prev.nextPieceType,
+            pieceIndex: prev.stats.piecesPlaced + 1,
+            spawnTick: prev.tick,
+            spawnTimeMs: getElapsedTimeMs(prev.timing, nowMs),
+          }),
         }
       }
 
@@ -1014,6 +1165,7 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
           completedGameResult: createGameResult(finalizedStats, endedAt),
           gameOverFlashKey: prev.gameOverFlashKey + 1,
           lastLockFeedback: null,
+          activeMoveReplaySeed: null,
         }
       }
 
@@ -1027,6 +1179,14 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
         heldPieceType: prev.activePiece.type,
         canHold: false,
         stats: nextStats,
+        activeMoveReplaySeed: createActiveMoveReplaySeed({
+          board: prev.board,
+          activePiece: spawned.activePiece,
+          nextPieceType: spawned.nextPieceType,
+          pieceIndex: prev.stats.piecesPlaced + 1,
+          spawnTick: prev.tick,
+          spawnTimeMs: getElapsedTimeMs(prev.timing, nowMs),
+        }),
       }
     })
     return changed
@@ -1137,6 +1297,14 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
                 }),
               ]
             : appendVisualFrame(prev.visualReplayFrames, lineClearVisualFrame, { force: true })
+        const nextMoveReplaySeed = createActiveMoveReplaySeed({
+          board: pending.board,
+          activePiece: pending.activePiece,
+          nextPieceType: pending.nextPieceType,
+          pieceIndex: prev.stats.piecesPlaced + 1,
+          spawnTick: prev.tick,
+          spawnTimeMs: lineClearTimeMs,
+        })
 
         return {
           ...prev,
@@ -1150,6 +1318,7 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
           lineClearRows: [],
           replayFrames,
           visualReplayFrames,
+          activeMoveReplaySeed: resolvedState === 'GAME_OVER' ? null : nextMoveReplaySeed,
         }
       })
     }, LINE_CLEAR_ANIMATION_MS)
@@ -1196,7 +1365,7 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
           }
 
           return {
-            ...resolveLock(prev, prev.activePiece, 0, false, ts, endedAt),
+            ...resolveLock(prev, prev.activePiece, 0, false, prev.tick + 1, ts, endedAt),
             tick: prev.tick + 1,
           }
         })
@@ -1236,6 +1405,7 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
     tick: model.tick,
     replayFrames: model.replayFrames,
     visualReplayFrames: model.visualReplayFrames,
+    moveReplayEvents: model.moveReplayEvents,
     isNewRecord,
     startGame,
     restartGame,

@@ -1,0 +1,215 @@
+.card {
+  width: min(100%, 1080px);
+  margin: 0 auto;
+  padding: 18px;
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(59, 130, 246, 0.08), transparent 42%),
+    var(--game-panel-bg, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--game-panel-border, rgba(255, 255, 255, 0.08));
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.38);
+  display: grid;
+  gap: 16px;
+}
+
+.header,
+.sectionHeader,
+.mistakeHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.title,
+.sectionTitle,
+.mistakeTitle,
+.boardTitle,
+.explanationTitle,
+.summaryTitle {
+  margin: 0;
+}
+
+.title {
+  font-size: 24px;
+}
+
+.subtitle,
+.sectionText,
+.mistakeMeta,
+.summaryText,
+.helperText,
+.emptyText,
+.summaryHint {
+  margin: 6px 0 0;
+  color: var(--tg-hint-color, #9ca3b5);
+  line-height: 1.45;
+}
+
+.buttonRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.primaryButton,
+.secondaryButton {
+  border: none;
+  min-height: 42px;
+  padding: 0 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.primaryButton {
+  background: linear-gradient(180deg, #478eff 0%, #2f74eb 100%);
+  color: #ffffff;
+}
+
+.secondaryButton {
+  background: var(--tg-secondary-bg-color, #202636);
+  color: var(--tg-text-color, #eef2ff);
+}
+
+.summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.summaryCard,
+.mistakeCard,
+.explanationCard,
+.boardCard,
+.emptyState {
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.summaryValue {
+  margin: 8px 0 0;
+  font-size: 26px;
+  font-weight: 800;
+}
+
+.metaRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.badge,
+.severityBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.badge {
+  background: rgba(59, 130, 246, 0.12);
+  color: #9fcbff;
+}
+
+.severityBadge {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.severityGood {
+  background: rgba(34, 197, 94, 0.14);
+  color: #8af0ab;
+}
+
+.severityInaccuracy {
+  background: rgba(250, 204, 21, 0.16);
+  color: #ffe28a;
+}
+
+.severityMistake {
+  background: rgba(249, 115, 22, 0.16);
+  color: #ffc187;
+}
+
+.severityBlunder {
+  background: rgba(239, 68, 68, 0.16);
+  color: #ff9b9b;
+}
+
+.section,
+.mistakeList {
+  display: grid;
+  gap: 12px;
+}
+
+.explanationGrid,
+.boardsRow {
+  display: grid;
+  gap: 12px;
+}
+
+.explanationGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.boardsRow {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.explanationList {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: var(--tg-text-color, #eef2ff);
+}
+
+.boardCard {
+  display: grid;
+  gap: 10px;
+}
+
+.boardGrid {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 2px;
+  padding: 8px;
+  border-radius: 12px;
+  background: rgba(8, 11, 17, 0.84);
+}
+
+.boardCell {
+  aspect-ratio: 1 / 1;
+  min-width: 0;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+.emptyState {
+  text-align: center;
+}
+
+@media (max-width: 1024px) {
+  .summaryGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .header,
+  .sectionHeader,
+  .mistakeHeader {
+    flex-direction: column;
+  }
+
+  .summaryGrid,
+  .explanationGrid,
+  .boardsRow {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+}

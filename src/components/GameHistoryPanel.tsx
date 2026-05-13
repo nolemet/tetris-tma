@@ -6,7 +6,9 @@ import styles from './GameHistoryPanel.module.css'
 interface GameHistoryPanelProps {
   history: GameResult[]
   availableReplayIds: Set<string>
+  availableAnalysisIds: Set<string>
   onOpenReplay: (replayId: string) => void
+  onOpenAnalysis: (replayId: string) => void
   onBack: () => void
   onClearHistory: () => void
 }
@@ -19,7 +21,9 @@ const formatPlayedAt = (value: string): string => {
 export const GameHistoryPanel = ({
   history,
   availableReplayIds,
+  availableAnalysisIds,
   onOpenReplay,
+  onOpenAnalysis,
   onBack,
   onClearHistory,
 }: GameHistoryPanelProps) => {
@@ -77,6 +81,7 @@ export const GameHistoryPanel = ({
         <div className={styles.list}>
           {history.map((item) => {
             const replayAvailable = Boolean(item.replayId && replayAvailability.has(item.replayId))
+            const analysisAvailable = Boolean(item.replayId && availableAnalysisIds.has(item.replayId))
             return (
               <article key={item.id} className={styles.item}>
                 <div className={styles.itemHeader}>
@@ -115,6 +120,13 @@ export const GameHistoryPanel = ({
                     </button>
                   ) : (
                     <span className={styles.unavailable}>Replay unavailable</span>
+                  )}
+                  {analysisAvailable && item.replayId ? (
+                    <button type="button" className={styles.ghostButton} onClick={() => onOpenAnalysis(item.replayId!)}>
+                      Analysis
+                    </button>
+                  ) : (
+                    <span className={styles.unavailable}>Analysis unavailable</span>
                   )}
                 </div>
               </article>

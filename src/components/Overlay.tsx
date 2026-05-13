@@ -9,10 +9,12 @@ interface OverlayProps {
   lines: number
   isNewRecord: boolean
   gameResult: GameResult | null
+  analysisAvailable?: boolean
   onStart: () => void
   onResume: () => void
   onRestart: () => void
   onShare: () => void
+  onOpenAnalysis?: () => void
 }
 
 export const Overlay = ({
@@ -22,10 +24,12 @@ export const Overlay = ({
   lines,
   isNewRecord,
   gameResult,
+  analysisAvailable = false,
   onStart,
   onResume,
   onRestart,
   onShare,
+  onOpenAnalysis,
 }: OverlayProps) => {
   if (state === 'PLAYING') {
     return null
@@ -115,6 +119,11 @@ export const Overlay = ({
         <button type="button" className={styles.secondary} onClick={onShare}>
           Share result
         </button>
+        {analysisAvailable && onOpenAnalysis ? (
+          <button type="button" className={styles.secondary} onClick={onOpenAnalysis}>
+            Разбор партии
+          </button>
+        ) : null}
       </div>
     </div>
   )

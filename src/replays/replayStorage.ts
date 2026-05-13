@@ -7,6 +7,8 @@ import type {
   ReplayFinalStats,
   ReplayFrame,
   ReplayLegacyFinalStats,
+  ReplayMoveEvent,
+  ReplayPlacementSnapshot,
   VisualFrame,
   VisualFrameEvent,
   VisualPieceSnapshot,
@@ -236,6 +238,66 @@ const normalizeVisualFrames = (value: unknown): VisualFrame[] => {
     .filter((item): item is VisualFrame => item !== null)
 }
 
+const normalizePlacementSnapshot = (value: unknown): ReplayPlacementSnapshot | null => {
+  if (!isRecord(value)) {
+    return null
+  }
+
+  const pieceType = getPieceType(value.pieceType)
+  if (!pieceType) {
+    return null
+  }
+
+  return {
+    pieceType,
+    x: getNumber(value.x),
+    y: getNumber(value.y),
+    rotation: Math.max(0, Math.min(3, Math.round(getNumber(value.rotation)))),
+    linesCleared: Math.max(0, getNumber(value.linesCleared)),
+  }
+}
+
+const normalizeMoveEvents = (value: unknown): ReplayMoveEvent[] => {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .map((event): ReplayMoveEvent | null => {
+      if (!isRecord(event)) {
+        return null
+      }
+
+      const pieceType = getPieceType(event.pieceType)
+      const boardBefore = normalizeBoard(event.boardBefore)
+      const boardAfter = normalizeBoard(event.boardAfter)
+      const playerPlacement = normalizePlacementSnapshot(event.playerPlacement)
+
+      if (!pieceType || !boardBefore || !boardAfter || !playerPlacement) {
+        return null
+      }
+
+      return {
+        id: getString(event.id, `move-${getNumber(event.pieceIndex, 0)}`),
+        pieceIndex: Math.max(0, getNumber(event.pieceIndex)),
+        pieceType,
+        nextPieceType: getPieceType(event.nextPieceType),
+        boardBefore,
+        boardAfter,
+        spawnTick: Math.max(0, getNumber(event.spawnTick)),
+        lockTick: Math.max(0, getNumber(event.lockTick)),
+        spawnTimeMs: Math.max(0, getNumber(event.spawnTimeMs)),
+        lockTimeMs: Math.max(0, getNumber(event.lockTimeMs)),
+        playerPlacement,
+        linesCleared: Math.max(0, getNumber(event.linesCleared)),
+        scoreAfter: Math.max(0, getNumber(event.scoreAfter)),
+        levelAfter: Math.max(1, getNumber(event.levelAfter, 1)),
+        comboAfter: Math.max(0, getNumber(event.comboAfter)),
+      }
+    })
+    .filter((item): item is ReplayMoveEvent => item !== null)
+}
+
 const normalizeReplayV1 = (raw: Record<string, unknown>): GameReplayV1 | null => {
   const finalStats = normalizeLegacyFinalStats(raw.finalStats)
   if (!finalStats) {
@@ -284,6 +346,7 @@ const normalizeReplayV3 = (raw: Record<string, unknown>): GameReplayV3 | null =>
   const finalStats = normalizeReplayFinalStats(raw.finalStats)
   const frames = normalizeFrames(raw.frames)
   const visualFrames = normalizeVisualFrames(raw.visualFrames)
+  const moveEvents = normalizeMoveEvents(raw.moveEvents)
   if (!finalStats || frames.length === 0 || visualFrames.length === 0) {
     return null
   }
@@ -301,6 +364,7 @@ const normalizeReplayV3 = (raw: Record<string, unknown>): GameReplayV3 | null =>
     inputs: normalizeInputs(raw.inputs),
     frames,
     visualFrames,
+    moveEvents,
     finalStats,
   }
 }

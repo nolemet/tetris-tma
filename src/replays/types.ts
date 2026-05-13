@@ -71,6 +71,32 @@ export interface VisualFrame {
   event?: VisualFrameEvent
 }
 
+export interface ReplayPlacementSnapshot {
+  pieceType: TetrominoType
+  x: number
+  y: number
+  rotation: number
+  linesCleared: number
+}
+
+export interface ReplayMoveEvent {
+  id: string
+  pieceIndex: number
+  pieceType: TetrominoType
+  nextPieceType?: TetrominoType | null
+  boardBefore: BoardMatrix
+  boardAfter: BoardMatrix
+  spawnTick: number
+  lockTick: number
+  spawnTimeMs: number
+  lockTimeMs: number
+  playerPlacement: ReplayPlacementSnapshot
+  linesCleared: number
+  scoreAfter: number
+  levelAfter: number
+  comboAfter: number
+}
+
 export interface GameReplayV1 {
   version: 1
   id: string
@@ -113,6 +139,7 @@ export interface GameReplayV3 {
   inputs: ReplayInput[]
   frames: ReplayFrame[]
   visualFrames: VisualFrame[]
+  moveEvents: ReplayMoveEvent[]
   finalStats: ReplayFinalStats
 }
 
