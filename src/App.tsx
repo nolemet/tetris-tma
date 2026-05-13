@@ -1,34 +1,45 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useBoardRowFit } from './hooks/useBoardRowFit'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FEEDBACK_ANIMATION_MS, BOARD_LOCK_FLASH_MS, HARD_DROP_FLASH_MS } from './animations/constants'
 import { Board } from './components/Board'
 import { ControlPad } from './components/ControlPad'
 import { GameFeedback } from './components/GameFeedback'
+import { GameHistoryPanel } from './components/GameHistoryPanel'
 import { GameModesPanel } from './components/GameModesPanel'
 import { MainMenu } from './components/MainMenu'
 import { NextPiece } from './components/NextPiece'
 import { Overlay } from './components/Overlay'
+import { ProfilePanel } from './components/ProfilePanel'
+import { ReplayViewer } from './components/ReplayViewer'
 import { SettingsPanel } from './components/SettingsPanel'
+import { SkinsPanel } from './components/SkinsPanel'
 import { Stats } from './components/Stats'
 import { CLASSIC_MODE_CONFIG } from './game/modes'
+import { generateGameSeed } from './game/seededRandom'
+import { useBoardRowFit } from './hooks/useBoardRowFit'
 import { useControls } from './hooks/useControls'
 import { useGame } from './hooks/useGame'
 import { useTelegram } from './hooks/useTelegram'
+import { createReplayRecorder, finalizeReplay, recordReplayAction, type ReplayRecorderSession } from './replays/recorder'
+import { clearReplays, loadReplays, saveReplay } from './replays/replayStorage'
 import { createDefaultKeybinds } from './settings/keybinds'
-import { resetSettings, updateSettings, loadSettings } from './settings/storage'
+import { clearGameHistory, loadGameHistory, saveGameResult } from './settings/gameHistoryStorage'
+import { loadSettings, resetSettings, updateSettings } from './settings/storage'
+import { applySkinPreset } from './skins/applySkin'
 import { soundManager } from './sound/manager'
 import { applyThemePreset } from './theme/applyTheme'
-import { getThemePreset } from './theme/presets'
 import type { GameAction, GameSettings } from './types'
 import { shareResult } from './utils/share'
 import styles from './App.module.css'
 
-type AppScreen = 'menu' | 'game' | 'modes' | 'settings'
+type AppScreen = 'menu' | 'game' | 'modes' | 'settings' | 'history' | 'replay' | 'skins' | 'profile'
 
 function App() {
-  const { webApp } = useTelegram()
+  const { webApp, user } = useTelegram()
   const [settings, setSettings] = useState<GameSettings>(() => loadSettings())
+  const [history, setHistory] = useState(() => loadGameHistory())
+  const [replays, setReplays] = useState(() => loadReplays())
   const [screen, setScreen] = useState<AppScreen>('menu')
+  const [selectedReplayId, setSelectedReplayId] = useState<string | null>(null)
   const game = useGame({
     startLevel: settings.gameplay.startLevel,
     animationsEnabled: settings.visual.animations,
@@ -39,15 +50,22 @@ function App() {
   const [lockPulse, setLockPulse] = useState(false)
   const [hardDropPulse, setHardDropPulse] = useState(false)
   const [gameOverPulse, setGameOverPulse] = useState(false)
+  const activeReplayRef = useRef<ReplayRecorderSession | null>(null)
+  const savedResultIdRef = useRef<string | null>(null)
   const dispatchCoreGameAction = game.dispatchGameAction
   const startCoreGame = game.startGame
-  const restartCoreGame = game.restartGame
 
   const isGameScreen = screen === 'game'
-  const themePreset = useMemo(() => getThemePreset(settings.visual.theme), [settings.visual.theme])
+  const isCenteredScreen = screen === 'menu' || screen === 'modes'
+  const selectedSkinPreset = useMemo(() => applySkinPreset(settings.visual.selectedSkin), [settings.visual.selectedSkin])
   const holdEnabledInCurrentMode = CLASSIC_MODE_CONFIG.enableHold
   const showHoldPreviewInCurrentMode =
     holdEnabledInCurrentMode && CLASSIC_MODE_CONFIG.showHoldPreview && settings.gameplay.showHoldPiece
+  const availableReplayIds = useMemo(() => new Set(replays.map((replay) => replay.id)), [replays])
+  const selectedReplay = useMemo(
+    () => replays.find((replay) => replay.id === selectedReplayId) ?? null,
+    [replays, selectedReplayId],
+  )
 
   useEffect(() => {
     applyThemePreset(settings.visual.theme)
@@ -143,14 +161,60 @@ function App() {
     return () => window.clearTimeout(timer)
   }, [game.gameOverFlashKey, isGameScreen])
 
+  useEffect(() => {
+    if (!game.completedGameResult || savedResultIdRef.current === game.completedGameResult.id) {
+      return
+    }
+
+    let replayId: string | null = null
+    const recorder = activeReplayRef.current
+    if (recorder) {
+      const replay = finalizeReplay(recorder, game.completedGameResult, Date.now())
+      setReplays(saveReplay(replay))
+      replayId = replay.id
+      activeReplayRef.current = null
+    }
+
+    setHistory(
+      saveGameResult({
+        ...game.completedGameResult,
+        replayId,
+      }),
+    )
+    savedResultIdRef.current = game.completedGameResult.id
+  }, [game.completedGameResult])
+
   const playButtonClick = useCallback(() => {
     soundManager.play('buttonClick', settings.sound)
   }, [settings.sound])
+
+  const beginClassicRun = useCallback(
+    (navigateToGame: boolean) => {
+      const seed = generateGameSeed()
+      activeReplayRef.current = createReplayRecorder({
+        mode: 'classic',
+        seed,
+        startLevel: settings.gameplay.startLevel,
+        startedAt: Date.now(),
+      })
+      savedResultIdRef.current = null
+      setFeedbackMessages([])
+      startCoreGame(seed)
+      if (navigateToGame) {
+        setScreen('game')
+      }
+    },
+    [settings.gameplay.startLevel, startCoreGame],
+  )
 
   const dispatchGameAction = useCallback(
     (action: GameAction): boolean => {
       if (action === 'hold' && !holdEnabledInCurrentMode) {
         return false
+      }
+
+      if (activeReplayRef.current && (game.state === 'PLAYING' || action === 'pause')) {
+        activeReplayRef.current = recordReplayAction(activeReplayRef.current, action, game.tick)
       }
 
       const handled = dispatchCoreGameAction(action)
@@ -170,7 +234,7 @@ function App() {
 
       return true
     },
-    [dispatchCoreGameAction, holdEnabledInCurrentMode, settings.sound],
+    [dispatchCoreGameAction, game.state, game.tick, holdEnabledInCurrentMode, settings.sound],
   )
 
   const handleShareResult = useCallback(() => {
@@ -189,10 +253,8 @@ function App() {
 
   const handlePlayClassic = useCallback(() => {
     playButtonClick()
-    setFeedbackMessages([])
-    startCoreGame()
-    setScreen('game')
-  }, [playButtonClick, startCoreGame])
+    beginClassicRun(true)
+  }, [beginClassicRun, playButtonClick])
 
   const onMoveLeft = useCallback(() => {
     dispatchGameAction('moveLeft')
@@ -220,15 +282,13 @@ function App() {
 
   const onStartGame = useCallback(() => {
     playButtonClick()
-    setFeedbackMessages([])
-    startCoreGame()
-  }, [playButtonClick, startCoreGame])
+    beginClassicRun(false)
+  }, [beginClassicRun, playButtonClick])
 
   const onRestartGame = useCallback(() => {
     playButtonClick()
-    setFeedbackMessages([])
-    restartCoreGame()
-  }, [playButtonClick, restartCoreGame])
+    beginClassicRun(false)
+  }, [beginClassicRun, playButtonClick])
 
   const onSettingsChange = useCallback((patch: Parameters<typeof updateSettings>[0]) => {
     setSettings(updateSettings(patch))
@@ -248,6 +308,21 @@ function App() {
     setSettings(resetSettings())
   }, [])
 
+  const onOpenHistory = useCallback(() => {
+    playButtonClick()
+    setScreen('history')
+  }, [playButtonClick])
+
+  const onOpenProfile = useCallback(() => {
+    playButtonClick()
+    setScreen('profile')
+  }, [playButtonClick])
+
+  const onOpenSkins = useCallback(() => {
+    playButtonClick()
+    setScreen('skins')
+  }, [playButtonClick])
+
   const onOpenModes = useCallback(() => {
     playButtonClick()
     setScreen('modes')
@@ -260,18 +335,55 @@ function App() {
 
   const onBackToMenu = useCallback(() => {
     playButtonClick()
-    if (game.state === 'PLAYING') {
-      dispatchCoreGameAction('pause')
+    if (isGameScreen && game.state === 'PLAYING') {
+      dispatchGameAction('pause')
     }
+    setSelectedReplayId(null)
     setScreen('menu')
-  }, [dispatchCoreGameAction, game.state, playButtonClick])
+  }, [dispatchGameAction, game.state, isGameScreen, playButtonClick])
+
+  const onOpenReplay = useCallback(
+    (replayId: string) => {
+      playButtonClick()
+      setSelectedReplayId(replayId)
+      setScreen('replay')
+    },
+    [playButtonClick],
+  )
+
+  const onBackToHistory = useCallback(() => {
+    playButtonClick()
+    setScreen('history')
+  }, [playButtonClick])
+
+  const onClearStoredHistory = useCallback(() => {
+    clearGameHistory()
+    clearReplays()
+    setHistory([])
+    setReplays([])
+    setSelectedReplayId(null)
+  }, [])
+
+  const onSelectSkin = useCallback(
+    (skinId: GameSettings['visual']['selectedSkin']) => {
+      playButtonClick()
+      setSettings(
+        updateSettings({
+          visual: {
+            selectedSkin: skinId,
+          },
+        }),
+      )
+    },
+    [playButtonClick],
+  )
 
   const { bindBoardControls } = useControls({
     gameState: game.state,
     keybinds: settings.controls.keybinds,
     swipeSensitivity: settings.controls.swipeSensitivity,
-    enableKeyboard: settings.controls.enableKeyboard,
-    enableTouchControls: settings.controls.enableTouchControls,
+    enableKeyboard: isGameScreen && settings.controls.enableKeyboard,
+    enableTouchControls: isGameScreen && settings.controls.enableTouchControls,
     dispatchGameAction,
   })
   const boardControls = bindBoardControls()
@@ -286,7 +398,7 @@ function App() {
     .filter(Boolean)
     .join(' ')
 
-  const mainClassName = [styles.main, isGameScreen ? '' : styles.centerMain].filter(Boolean).join(' ')
+  const mainClassName = [styles.main, isCenteredScreen ? styles.centerMain : ''].filter(Boolean).join(' ')
 
   return (
     <div className={styles.app}>
@@ -297,7 +409,14 @@ function App() {
 
       <main className={mainClassName}>
         {screen === 'menu' ? (
-          <MainMenu onPlay={handlePlayClassic} onOpenModes={onOpenModes} onOpenSettings={onOpenSettings} />
+          <MainMenu
+            onPlay={handlePlayClassic}
+            onOpenHistory={onOpenHistory}
+            onOpenProfile={onOpenProfile}
+            onOpenSkins={onOpenSkins}
+            onOpenModes={onOpenModes}
+            onOpenSettings={onOpenSettings}
+          />
         ) : null}
 
         {screen === 'modes' ? <GameModesPanel onBack={onBackToMenu} /> : null}
@@ -306,7 +425,7 @@ function App() {
           <section className={styles.screenPanel}>
             <div className={styles.screenPanelHeader}>
               <button type="button" className={styles.backButton} onClick={onBackToMenu}>
-                Назад
+                Back
               </button>
             </div>
             <SettingsPanel
@@ -316,6 +435,43 @@ function App() {
               onResetAllSettings={onResetAllSettings}
             />
           </section>
+        ) : null}
+
+        {screen === 'history' ? (
+          <GameHistoryPanel
+            history={history}
+            availableReplayIds={availableReplayIds}
+            onOpenReplay={onOpenReplay}
+            onBack={onBackToMenu}
+            onClearHistory={onClearStoredHistory}
+          />
+        ) : null}
+
+        {screen === 'skins' ? (
+          <SkinsPanel selectedSkin={settings.visual.selectedSkin} onSelectSkin={onSelectSkin} onBack={onBackToMenu} />
+        ) : null}
+
+        {screen === 'profile' ? (
+          <ProfilePanel
+            user={user}
+            history={history}
+            onOpenHistory={onOpenHistory}
+            onOpenSkins={onOpenSkins}
+            onBack={onBackToMenu}
+          />
+        ) : null}
+
+        {screen === 'replay' ? (
+          <ReplayViewer
+            key={selectedReplayId ?? 'replay-missing'}
+            replay={selectedReplay}
+            showGrid={settings.visual.showGrid}
+            blockStyle={settings.visual.blockStyle}
+            pieceColors={selectedSkinPreset.pieceColors}
+            ghostColor={selectedSkinPreset.ghostColor}
+            onBackToHistory={onBackToHistory}
+            onBackToMenu={onBackToMenu}
+          />
         ) : null}
 
         {screen === 'game' ? (
@@ -332,8 +488,8 @@ function App() {
                         lineClearRows={game.lineClearRows}
                         showGrid={settings.visual.showGrid}
                         blockStyle={settings.visual.blockStyle}
-                        pieceColors={themePreset.pieceColors}
-                        ghostColor={themePreset.ghostColor}
+                        pieceColors={selectedSkinPreset.pieceColors}
+                        ghostColor={selectedSkinPreset.ghostColor}
                         onTouchStart={boardControls.onTouchStart}
                         onTouchEnd={boardControls.onTouchEnd}
                       />
@@ -365,13 +521,17 @@ function App() {
                         layout="sidebar"
                       />
                       {settings.gameplay.showNextPiece ? (
-                        <NextPiece pieceType={game.nextPieceType} pieceColors={themePreset.pieceColors} layout="sidebar" />
+                        <NextPiece
+                          pieceType={game.nextPieceType}
+                          pieceColors={selectedSkinPreset.pieceColors}
+                          layout="sidebar"
+                        />
                       ) : null}
                       {showHoldPreviewInCurrentMode ? (
                         <NextPiece
                           title="HOLD"
                           pieceType={game.heldPieceType}
-                          pieceColors={themePreset.pieceColors}
+                          pieceColors={selectedSkinPreset.pieceColors}
                           layout="sidebar"
                         />
                       ) : null}

@@ -1,0 +1,187 @@
+.wrapper,
+.card {
+  width: min(100%, 980px);
+  margin: 0 auto;
+  padding: 18px;
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(59, 130, 246, 0.07), transparent 42%),
+    var(--game-panel-bg, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--game-panel-border, rgba(255, 255, 255, 0.08));
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.38);
+  display: grid;
+  gap: 14px;
+}
+
+.header,
+.metaRow,
+.actions,
+.controls,
+.headerButtons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.header {
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.title {
+  margin: 0;
+  font-size: 24px;
+}
+
+.text,
+.warning {
+  margin: 6px 0 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--tg-hint-color, #9ca3b5);
+}
+
+.warning {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 209, 102, 0.12);
+  color: #ffd98e;
+}
+
+.badge {
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 12px;
+}
+
+.boardSection {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.scaleOuter {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.scaleInner {
+  flex-shrink: 0;
+}
+
+.boardRow {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.boardWrap {
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--game-board-border, rgba(255, 255, 255, 0.09));
+  background: var(--game-board-bg, #0a0d13);
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.5);
+}
+
+.sideHud {
+  width: 150px;
+  max-width: 150px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.statsCard {
+  padding: 12px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  display: grid;
+  gap: 10px;
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--tg-hint-color, #9ca3b5);
+}
+
+.statsList {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.statRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.statRow dt {
+  color: var(--tg-hint-color, #9ca3b5);
+}
+
+.statRow dd {
+  margin: 0;
+  font-weight: 700;
+}
+
+.primaryButton,
+.secondaryButton,
+.speedButton,
+.speedActive {
+  border: none;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.primaryButton {
+  background: linear-gradient(180deg, #478eff 0%, #2f74eb 100%);
+  color: #ffffff;
+}
+
+.secondaryButton,
+.speedButton {
+  background: var(--tg-secondary-bg-color, #202636);
+  color: var(--tg-text-color, #eef2ff);
+}
+
+.speedActive {
+  background: rgba(59, 130, 246, 0.18);
+  color: #9fcbff;
+}
+
+.speedGroup {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 900px) {
+  .header,
+  .controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .boardRow {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .sideHud {
+    width: min(100%, 360px);
+    max-width: 100%;
+  }
+}

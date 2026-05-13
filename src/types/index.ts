@@ -6,7 +6,7 @@ export type BlockStyleId = 'CLASSIC' | 'NEON' | 'PIXEL'
 
 export type ThemeId = 'DEFAULT_DARK' | 'AMOLED' | 'RETRO'
 
-export type SkinId = 'classic'
+export type SkinId = 'classic' | 'neon' | 'ice' | 'fire' | 'pixel' | 'telegramBlue'
 
 export type GameMode = 'classic'
 
@@ -110,6 +110,8 @@ export interface GameResult extends GameStats {
   endedAt: string
   finalLevel: number
   grade: GameGrade
+  rating: number
+  replayId?: string | null
 }
 
 export interface GameSettings {

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import { BLOCK_STYLE_PRESETS, THEME_PRESETS } from '../theme/presets'
+import { SKIN_PRESETS } from '../skins/catalog'
 import { findActionForKeyCode, formatKeyCode, GAME_ACTION_LABELS, GAME_ACTIONS } from '../settings/keybinds'
-import type { BlockStyleId, GameAction, GameSettings, ThemeId } from '../types'
+import type { BlockStyleId, GameAction, GameSettings, SkinId, ThemeId } from '../types'
 import type { DeepPartial } from '../settings/storage'
 import styles from './SettingsPanel.module.css'
 
@@ -88,6 +89,10 @@ export const SettingsPanel = ({
 
   const onThemeChange = (event: ChangeEvent<HTMLSelectElement>) => {
     onChange({ visual: { theme: event.target.value as ThemeId } })
+  }
+
+  const onSkinChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    onChange({ visual: { selectedSkin: event.target.value as SkinId } })
   }
 
   const onStartLevelChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -236,12 +241,12 @@ export const SettingsPanel = ({
           </div>
           <div className={styles.row}>
             <label htmlFor="selectedSkin">Skin</label>
-            <select
-              id="selectedSkin"
-              value={settings.visual.selectedSkin}
-              onChange={() => onChange({ visual: { selectedSkin: 'classic' } })}
-            >
-              <option value="classic">Classic</option>
+            <select id="selectedSkin" value={settings.visual.selectedSkin} onChange={onSkinChange}>
+              {SKIN_PRESETS.map((skin) => (
+                <option key={skin.id} value={skin.id}>
+                  {skin.name}
+                </option>
+              ))}
             </select>
           </div>
         </div>

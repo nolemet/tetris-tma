@@ -1,5 +1,6 @@
 import { createDefaultKeybinds } from './keybinds'
-import type { BlockStyleId, GameSettings, ThemeId } from '../types'
+import { isSkinId } from '../skins/catalog'
+import type { BlockStyleId, GameSettings, SkinId, ThemeId } from '../types'
 
 const STORAGE_KEY = 'tetris-tma-settings'
 const LEGACY_STORAGE_KEY = 'tetris-tma-settings-v1'
@@ -52,6 +53,10 @@ const getBlockStyle = (value: unknown, fallback: BlockStyleId): BlockStyleId => 
 
 const getTheme = (value: unknown, fallback: ThemeId): ThemeId => {
   return typeof value === 'string' && THEME_IDS.has(value as ThemeId) ? (value as ThemeId) : fallback
+}
+
+const getSkin = (value: unknown, fallback: SkinId): SkinId => {
+  return isSkinId(value) ? value : fallback
 }
 
 export const getDefaultSettings = (): GameSettings => {
@@ -130,7 +135,7 @@ const normalizeSettings = (raw: unknown): GameSettings => {
     visual: {
       showGrid: getBoolean(visual.showGrid, defaults.visual.showGrid),
       animations: getBoolean(visual.animations, defaults.visual.animations),
-      selectedSkin: getString(visual.selectedSkin, defaults.visual.selectedSkin) as 'classic',
+      selectedSkin: getSkin(visual.selectedSkin, defaults.visual.selectedSkin),
       theme: getTheme(visual.theme ?? raw.theme, defaults.visual.theme),
       blockStyle: getBlockStyle(visual.blockStyle ?? raw.blockStyle, defaults.visual.blockStyle),
     },

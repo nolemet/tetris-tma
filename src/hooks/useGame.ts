@@ -8,7 +8,7 @@ import {
 import { BASE_TICK_MS, MIN_TICK_MS } from '../game/constants'
 import { countBoardHoles, getBoardHeight } from '../game/metrics'
 import { createPieceGenerator, getNextPiece, peekNextPiece, type PieceGenerator } from '../game/pieceGenerator'
-import { calculateGameGrade } from '../game/results'
+import { calculateGameGrade, calculateGameRating } from '../game/results'
 import { generateGameSeed } from '../game/seededRandom'
 import {
   canPlacePiece,
@@ -20,7 +20,6 @@ import {
   spawnNextPiece,
 } from '../game/engine'
 import { calculateLockScore, levelByLines, softDropScore, tickMsByLevel } from '../game/scoring'
-import { saveGameResult } from '../settings/gameHistoryStorage'
 import { createPiece } from '../utils/piece'
 import { getHighScore, setHighScore } from '../utils/storage'
 import type { ActivePiece, BoardMatrix, GameAction, GameMode, GameResult, GameState, GameStats, TetrominoType } from '../types'
@@ -156,6 +155,7 @@ const createGameResult = (stats: GameStats, endedAt: string): GameResult => {
     endedAt,
     finalLevel: stats.level,
     grade: calculateGameGrade(stats),
+    rating: calculateGameRating(stats),
   }
 }
 
@@ -199,7 +199,6 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
   const frameRef = useRef<number | null>(null)
   const lastTickRef = useRef<number>(0)
   const lockFeedbackIdRef = useRef(0)
-  const savedResultIdRef = useRef<string | null>(null)
 
   const resolveLock = useCallback(
     (
@@ -314,7 +313,6 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
     (seedOverride?: string) => {
       const seed = seedOverride ?? generateGameSeed()
       const nowMs = typeof performance !== 'undefined' ? performance.now() : 0
-      savedResultIdRef.current = null
       lastTickRef.current = nowMs
 
       setModel((prev) => {
@@ -654,15 +652,6 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
   }, [model.stats.highScore])
 
   useEffect(() => {
-    if (!model.completedGameResult || savedResultIdRef.current === model.completedGameResult.id) {
-      return
-    }
-
-    saveGameResult(model.completedGameResult)
-    savedResultIdRef.current = model.completedGameResult.id
-  }, [model.completedGameResult])
-
-  useEffect(() => {
     if (!model.pendingSpawn) {
       return
     }
@@ -715,7 +704,10 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
             }
           }
 
-          return resolveLock(prev, prev.activePiece, 0, false, ts, endedAt)
+          return {
+            ...resolveLock(prev, prev.activePiece, 0, false, ts, endedAt),
+            tick: prev.tick + 1,
+          }
         })
       }
       frameRef.current = window.requestAnimationFrame(loop)
