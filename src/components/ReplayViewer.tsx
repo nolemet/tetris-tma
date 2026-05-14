@@ -1,16 +1,15 @@
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
-import { formatDuration } from '../game/results'
 import { useBoardRowFit } from '../hooks/useBoardRowFit'
+import { useI18n } from '../i18n'
 import {
   createReplayPlaybackState,
   getReplayCurrentTimeMs,
   getReplayDurationMs,
-  getReplayKindLabel,
   getReplayRenderState,
   seekReplayPlayback,
 } from '../replays/replayPlayer'
 import type { GameReplay } from '../replays/types'
-import type { BlockStyleId, TetrominoType } from '../types'
+import type { BlockStyleId, GameMode, TetrominoType } from '../types'
 import { Board } from './Board'
 import { NextPiece } from './NextPiece'
 import styles from './ReplayViewer.module.css'
@@ -32,6 +31,20 @@ interface ReplayViewerSessionProps extends ReplayViewerProps {
   replay: GameReplay
 }
 
+const getReplayKindLabelKey = (replay: GameReplay) => {
+  if (replay.version === 3) {
+    return 'replay.smooth' as const
+  }
+  if (replay.version === 2) {
+    return 'replay.snapshot' as const
+  }
+  return 'replay.legacy' as const
+}
+
+const getModeLabelKey = (mode: GameMode) => {
+  return mode === 'vsBot' ? ('mode.vsBot' as const) : ('mode.classic' as const)
+}
+
 export const ReplayViewer = ({
   replay,
   showGrid,
@@ -41,17 +54,19 @@ export const ReplayViewer = ({
   onBackToHistory,
   onBackToMenu,
 }: ReplayViewerProps) => {
+  const { t } = useI18n()
+
   if (!replay) {
     return (
       <section className={styles.card}>
-        <h2 className={styles.title}>Replay not found</h2>
-        <p className={styles.text}>This replay is unavailable on this device.</p>
+        <h2 className={styles.title}>{t('replay.notFound')}</h2>
+        <p className={styles.text}>{t('replay.notFoundText')}</p>
         <div className={styles.actions}>
           <button type="button" className={styles.secondaryButton} onClick={onBackToHistory}>
-            Back to history
+            {t('common.backToHistory')}
           </button>
           <button type="button" className={styles.secondaryButton} onClick={onBackToMenu}>
-            Back to menu
+            {t('common.backToMenu')}
           </button>
         </div>
       </section>
@@ -81,6 +96,7 @@ const ReplayViewerSession = ({
   onBackToHistory,
   onBackToMenu,
 }: ReplayViewerSessionProps) => {
+  const { t, formatDuration, formatInteger, formatDateTime } = useI18n()
   const [speed, setSpeed] = useState<number>(1)
   const [isPlaying, setIsPlaying] = useState(false)
   const [playback, setPlayback] = useState(() => createReplayPlaybackState(replay))
@@ -148,15 +164,15 @@ const ReplayViewerSession = ({
       }
       lastAnimationTimeRef.current = null
     }
-  }, [isPlaying, replay?.id])
+  }, [isPlaying, replay.id])
 
   const renderState = useMemo(() => getReplayRenderState(playback), [playback])
 
-  const durationMs = playback ? getReplayDurationMs(playback) : replay?.durationMs ?? 0
+  const durationMs = playback ? getReplayDurationMs(playback) : replay.durationMs
   const currentTimeMs = playback ? getReplayCurrentTimeMs(playback) : 0
   const sliderMax = Math.max(Math.ceil(durationMs), 1)
   const sliderValue = Math.min(currentTimeMs, sliderMax)
-  const replayKindLabel = replay ? getReplayKindLabel(replay) : 'Replay unavailable'
+  const replayKindLabel = t(getReplayKindLabelKey(replay))
   const frameCount = playback
     ? playback.kind === 'smooth'
       ? playback.replay.visualFrames.length
@@ -174,13 +190,19 @@ const ReplayViewerSession = ({
 
   const statusLabel = useMemo(() => {
     if (!playback) {
-      return 'Replay unavailable'
+      return t('common.notAvailable')
     }
     if (playback.finished) {
-      return playback.warning ? 'Finished with warning' : 'Finished'
+      return playback.warning ? t('replay.statusFinishedWarning') : t('replay.statusFinished')
     }
-    return isPlaying ? 'Playing' : 'Paused'
-  }, [isPlaying, playback])
+    return isPlaying ? t('replay.statusPlaying') : t('replay.statusPaused')
+  }, [isPlaying, playback, t])
+
+  const warningText = playback.warning
+    ? playback.kind === 'legacy'
+      ? t('replay.warningLegacy')
+      : t('replay.warningMismatch')
+    : null
 
   const resetAnimationClock = () => {
     lastAnimationTimeRef.current = null
@@ -201,20 +223,12 @@ const ReplayViewerSession = ({
   }
 
   const handleRestart = () => {
-    if (!replay) {
-      return
-    }
-
     resetAnimationClock()
     setIsPlaying(false)
     commitPlayback(createReplayPlaybackState(replay))
   }
 
   const handlePlayPause = () => {
-    if (!replay) {
-      return
-    }
-
     if (isPlaying) {
       setIsPlaying(false)
       return
@@ -231,35 +245,41 @@ const ReplayViewerSession = ({
     <section className={styles.wrapper}>
       <div className={styles.header}>
         <div>
-          <h2 className={styles.title}>TETRIS Replay</h2>
+          <h2 className={styles.title}>{t('replay.title')}</h2>
           <p className={styles.text}>
-            {new Date(replay.finishedAt).toLocaleString()} - Seed: {replay.seed}
+            {formatDateTime(replay.finishedAt)} - {t('common.seed')}: {replay.seed}
           </p>
           <p className={styles.text}>{replayKindLabel}</p>
         </div>
         <div className={styles.headerButtons}>
           <button type="button" className={styles.secondaryButton} onClick={onBackToHistory}>
-            Back to history
+            {t('common.backToHistory')}
           </button>
           <button type="button" className={styles.secondaryButton} onClick={onBackToMenu}>
-            Back to menu
+            {t('common.backToMenu')}
           </button>
         </div>
       </div>
 
-      {playback.warning ? <div className={styles.warning}>{playback.warning}</div> : null}
+      {warningText ? <div className={styles.warning}>{warningText}</div> : null}
 
       <div className={styles.metaRow}>
-        <span className={styles.badge}>Mode: {replay.mode}</span>
-        <span className={styles.badge}>Status: {statusLabel}</span>
-        <span className={styles.badge}>Original duration: {formatDuration(durationMs)}</span>
+        <span className={styles.badge}>
+          {t('common.mode')}: {t(getModeLabelKey(replay.mode))}
+        </span>
+        <span className={styles.badge}>
+          {t('common.status')}: {statusLabel}
+        </span>
+        <span className={styles.badge}>
+          {t('replay.originalDuration')}: {formatDuration(durationMs)}
+        </span>
         <span className={styles.badge}>{replayKindLabel}</span>
         <span className={styles.badge}>
           {playback.kind === 'smooth'
-            ? `Visual frames: ${frameCounter}`
+            ? t('replay.visualFrames', { count: frameCounter })
             : playback.kind === 'snapshot'
-              ? `Snapshots: ${frameCounter}`
-              : `Inputs: ${frameCounter}`}
+              ? t('replay.snapshots', { count: frameCounter })
+              : t('replay.inputs', { count: frameCounter })}
         </span>
       </div>
 
@@ -282,35 +302,35 @@ const ReplayViewerSession = ({
 
               <div className={styles.sideHud}>
                 <article className={styles.statsCard}>
-                  <h3 className={styles.cardTitle}>Replay stats</h3>
+                  <h3 className={styles.cardTitle}>{t('replay.statsTitle')}</h3>
                   <dl className={styles.statsList}>
                     <div className={styles.statRow}>
-                      <dt>Score</dt>
-                      <dd>{renderState.score}</dd>
+                      <dt>{t('common.score')}</dt>
+                      <dd>{formatInteger(renderState.score)}</dd>
                     </div>
                     <div className={styles.statRow}>
-                      <dt>Lines</dt>
-                      <dd>{renderState.lines}</dd>
+                      <dt>{t('common.lines')}</dt>
+                      <dd>{formatInteger(renderState.lines)}</dd>
                     </div>
                     <div className={styles.statRow}>
-                      <dt>Pieces</dt>
-                      <dd>{renderState.pieces}</dd>
+                      <dt>{t('common.pieces')}</dt>
+                      <dd>{formatInteger(renderState.pieces)}</dd>
                     </div>
                     <div className={styles.statRow}>
-                      <dt>Level</dt>
-                      <dd>{renderState.level}</dd>
+                      <dt>{t('common.level')}</dt>
+                      <dd>{formatInteger(renderState.level)}</dd>
                     </div>
                     <div className={styles.statRow}>
-                      <dt>Tick</dt>
-                      <dd>{renderState.tick}</dd>
+                      <dt>{t('replay.tick')}</dt>
+                      <dd>{formatInteger(renderState.tick)}</dd>
                     </div>
                     <div className={styles.statRow}>
-                      <dt>Final grade</dt>
+                      <dt>{t('replay.finalGrade')}</dt>
                       <dd>{renderState.grade}</dd>
                     </div>
                     <div className={styles.statRow}>
-                      <dt>Final rating</dt>
-                      <dd>{renderState.rating}</dd>
+                      <dt>{t('replay.finalRating')}</dt>
+                      <dd>{formatInteger(renderState.rating ?? 0)}</dd>
                     </div>
                   </dl>
                 </article>
@@ -325,10 +345,10 @@ const ReplayViewerSession = ({
       <div className={styles.timelineCard}>
         <div className={styles.transportRow}>
           <button type="button" className={styles.primaryButton} onClick={handlePlayPause}>
-            {isPlaying ? 'Pause' : 'Play'}
+            {isPlaying ? t('replay.pause') : t('replay.play')}
           </button>
           <button type="button" className={styles.secondaryButton} onClick={handleRestart}>
-            Restart
+            {t('replay.restart')}
           </button>
           <button type="button" className={styles.secondaryButton} onClick={() => jumpBy(-SEEK_STEP_MS)}>
             -5s

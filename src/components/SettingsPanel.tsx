@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
-import type { ChangeEvent } from 'react'
+import { useEffect, useState, type ChangeEvent } from 'react'
 import { BLOCK_STYLE_PRESETS, THEME_PRESETS } from '../theme/presets'
 import { SKIN_PRESETS } from '../skins/catalog'
-import { findActionForKeyCode, formatKeyCode, GAME_ACTION_LABELS, GAME_ACTIONS } from '../settings/keybinds'
-import type { BlockStyleId, GameAction, GameSettings, SkinId, ThemeId } from '../types'
+import { useI18n } from '../i18n'
+import { findActionForKeyCode, GAME_ACTIONS } from '../settings/keybinds'
+import type { BlockStyleId, GameAction, GameSettings, SkinId, ThemeId, UiLanguage } from '../types'
 import type { DeepPartial } from '../settings/storage'
 import styles from './SettingsPanel.module.css'
 
@@ -14,8 +14,68 @@ interface SettingsPanelProps {
   onResetAllSettings: () => void
 }
 
-const toggleLabel = (enabled: boolean): 'ON' | 'OFF' => {
-  return enabled ? 'ON' : 'OFF'
+const getActionLabelKey = (action: GameAction) => {
+  switch (action) {
+    case 'moveLeft':
+      return 'settings.action.moveLeft' as const
+    case 'moveRight':
+      return 'settings.action.moveRight' as const
+    case 'softDrop':
+      return 'settings.action.softDrop' as const
+    case 'hardDrop':
+      return 'settings.action.hardDrop' as const
+    case 'rotateCW':
+      return 'settings.action.rotateCW' as const
+    case 'rotateCCW':
+      return 'settings.action.rotateCCW' as const
+    case 'hold':
+      return 'settings.action.hold' as const
+    case 'pause':
+      return 'settings.action.pause' as const
+  }
+}
+
+const getBlockStyleLabelKey = (styleId: BlockStyleId) => {
+  switch (styleId) {
+    case 'CLASSIC':
+      return 'settings.blockStyle.classic' as const
+    case 'NEON':
+      return 'settings.blockStyle.neon' as const
+    case 'PIXEL':
+      return 'settings.blockStyle.pixel' as const
+  }
+}
+
+const getThemeLabelKey = (themeId: ThemeId) => {
+  switch (themeId) {
+    case 'DEFAULT_DARK':
+      return 'settings.theme.defaultDark' as const
+    case 'AMOLED':
+      return 'settings.theme.amoled' as const
+    case 'RETRO':
+      return 'settings.theme.retro' as const
+  }
+}
+
+const getSkinNameKey = (skinId: SkinId) => {
+  switch (skinId) {
+    case 'classic':
+      return 'skins.skin.classic.name' as const
+    case 'neon':
+      return 'skins.skin.neon.name' as const
+    case 'ice':
+      return 'skins.skin.ice.name' as const
+    case 'fire':
+      return 'skins.skin.fire.name' as const
+    case 'pixel':
+      return 'skins.skin.pixel.name' as const
+    case 'telegramBlue':
+      return 'skins.skin.telegramBlue.name' as const
+  }
+}
+
+const toggleLabel = (enabled: boolean, onLabel: string, offLabel: string): string => {
+  return enabled ? onLabel : offLabel
 }
 
 export const SettingsPanel = ({
@@ -24,6 +84,7 @@ export const SettingsPanel = ({
   onResetKeybinds,
   onResetAllSettings,
 }: SettingsPanelProps) => {
+  const { t, formatKeyCode } = useI18n()
   const [bindingAction, setBindingAction] = useState<GameAction | null>(null)
   const [bindingMessage, setBindingMessage] = useState<string | null>(null)
 
@@ -40,6 +101,7 @@ export const SettingsPanel = ({
       const nextCode = event.code
       const currentCode = settings.controls.keybinds[bindingAction]
       const occupiedAction = findActionForKeyCode(nextCode, settings.controls.keybinds)
+      const actionLabel = t(getActionLabelKey(bindingAction))
 
       if (occupiedAction && occupiedAction !== bindingAction) {
         onChange({
@@ -52,7 +114,10 @@ export const SettingsPanel = ({
           },
         })
         setBindingMessage(
-          `${GAME_ACTION_LABELS[bindingAction]} swapped with ${GAME_ACTION_LABELS[occupiedAction]}.`,
+          t('settings.bindingSwapped', {
+            action: actionLabel,
+            occupied: t(getActionLabelKey(occupiedAction)),
+          }),
         )
       } else {
         onChange({
@@ -63,7 +128,12 @@ export const SettingsPanel = ({
             },
           },
         })
-        setBindingMessage(`${GAME_ACTION_LABELS[bindingAction]} set to ${formatKeyCode(nextCode)}.`)
+        setBindingMessage(
+          t('settings.bindingSet', {
+            action: actionLabel,
+            key: formatKeyCode(nextCode),
+          }),
+        )
       }
 
       setBindingAction(null)
@@ -73,7 +143,7 @@ export const SettingsPanel = ({
     return () => {
       window.removeEventListener('keydown', onKeyDown, true)
     }
-  }, [bindingAction, onChange, settings.controls.keybinds])
+  }, [bindingAction, formatKeyCode, onChange, settings.controls.keybinds, t])
 
   const onVolumeChange = (event: ChangeEvent<HTMLInputElement>) => {
     onChange({ sound: { volume: Number(event.target.value) / 100 } })
@@ -99,57 +169,77 @@ export const SettingsPanel = ({
     onChange({ gameplay: { startLevel: Number(event.target.value) } })
   }
 
+  const onLanguageChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    onChange({ ui: { language: event.target.value as UiLanguage } })
+  }
+
   const onBindingReset = () => {
     setBindingAction(null)
-    setBindingMessage('Keybinds reset to defaults.')
+    setBindingMessage(t('settings.bindingReset'))
     onResetKeybinds()
   }
 
   const onFullReset = () => {
     setBindingAction(null)
-    setBindingMessage('All settings reset.')
+    setBindingMessage(t('settings.allReset'))
     onResetAllSettings()
   }
+
+  const onLabel = t('settings.toggle.on')
+  const offLabel = t('settings.toggle.off')
 
   return (
     <section className={styles.card}>
       <div className={styles.header}>
-        <h2 className={styles.title}>Settings</h2>
+        <h2 className={styles.title}>{t('settings.title')}</h2>
         <span className={styles.version}>v{settings.version}</span>
       </div>
 
       <div className={styles.group}>
-        <h3 className={styles.groupTitle}>Gameplay</h3>
+        <h3 className={styles.groupTitle}>{t('settings.section.interface')}</h3>
         <div className={styles.list}>
           <div className={styles.row}>
-            <span>Ghost piece</span>
+            <label htmlFor="interfaceLanguage">{t('settings.language')}</label>
+            <select id="interfaceLanguage" value={settings.ui.language} onChange={onLanguageChange}>
+              <option value="ru">{t('settings.language.ru')}</option>
+              <option value="en">{t('settings.language.en')}</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className={styles.group}>
+        <h3 className={styles.groupTitle}>{t('settings.section.gameplay')}</h3>
+        <div className={styles.list}>
+          <div className={styles.row}>
+            <span>{t('settings.ghostPiece')}</span>
             <button
               type="button"
               onClick={() => onChange({ gameplay: { ghostPiece: !settings.gameplay.ghostPiece } })}
             >
-              {toggleLabel(settings.gameplay.ghostPiece)}
+              {toggleLabel(settings.gameplay.ghostPiece, onLabel, offLabel)}
             </button>
           </div>
           <div className={styles.row}>
-            <span>Show next piece</span>
+            <span>{t('settings.showNextPiece')}</span>
             <button
               type="button"
               onClick={() => onChange({ gameplay: { showNextPiece: !settings.gameplay.showNextPiece } })}
             >
-              {toggleLabel(settings.gameplay.showNextPiece)}
+              {toggleLabel(settings.gameplay.showNextPiece, onLabel, offLabel)}
             </button>
           </div>
           <div className={styles.row}>
-            <span>Show hold piece</span>
+            <span>{t('settings.showHoldPiece')}</span>
             <button
               type="button"
               onClick={() => onChange({ gameplay: { showHoldPiece: !settings.gameplay.showHoldPiece } })}
             >
-              {toggleLabel(settings.gameplay.showHoldPiece)}
+              {toggleLabel(settings.gameplay.showHoldPiece, onLabel, offLabel)}
             </button>
           </div>
           <div className={styles.row}>
-            <label htmlFor="startLevel">Start level</label>
+            <label htmlFor="startLevel">{t('settings.startLevel')}</label>
             <input
               id="startLevel"
               type="number"
@@ -163,30 +253,28 @@ export const SettingsPanel = ({
       </div>
 
       <div className={styles.group}>
-        <h3 className={styles.groupTitle}>Controls</h3>
+        <h3 className={styles.groupTitle}>{t('settings.section.controls')}</h3>
         <div className={styles.list}>
           <div className={styles.row}>
-            <span>Keyboard</span>
+            <span>{t('settings.keyboard')}</span>
             <button
               type="button"
               onClick={() => onChange({ controls: { enableKeyboard: !settings.controls.enableKeyboard } })}
             >
-              {toggleLabel(settings.controls.enableKeyboard)}
+              {toggleLabel(settings.controls.enableKeyboard, onLabel, offLabel)}
             </button>
           </div>
           <div className={styles.row}>
-            <span>Touch controls</span>
+            <span>{t('settings.touchControls')}</span>
             <button
               type="button"
-              onClick={() =>
-                onChange({ controls: { enableTouchControls: !settings.controls.enableTouchControls } })
-              }
+              onClick={() => onChange({ controls: { enableTouchControls: !settings.controls.enableTouchControls } })}
             >
-              {toggleLabel(settings.controls.enableTouchControls)}
+              {toggleLabel(settings.controls.enableTouchControls, onLabel, offLabel)}
             </button>
           </div>
           <div className={styles.row}>
-            <label htmlFor="swipeSensitivity">Swipe sensitivity</label>
+            <label htmlFor="swipeSensitivity">{t('settings.swipeSensitivity')}</label>
             <input
               id="swipeSensitivity"
               type="range"
@@ -197,54 +285,51 @@ export const SettingsPanel = ({
               onChange={onSwipeSensitivityChange}
             />
           </div>
-          <p className={styles.hint}>Current swipe threshold: {settings.controls.swipeSensitivity}px</p>
+          <p className={styles.hint}>{t('settings.swipeThreshold', { pixels: settings.controls.swipeSensitivity })}</p>
         </div>
       </div>
 
       <div className={styles.group}>
-        <h3 className={styles.groupTitle}>Visual</h3>
+        <h3 className={styles.groupTitle}>{t('settings.section.visual')}</h3>
         <div className={styles.list}>
           <div className={styles.row}>
-            <span>Show grid</span>
+            <span>{t('settings.showGrid')}</span>
             <button type="button" onClick={() => onChange({ visual: { showGrid: !settings.visual.showGrid } })}>
-              {toggleLabel(settings.visual.showGrid)}
+              {toggleLabel(settings.visual.showGrid, onLabel, offLabel)}
             </button>
           </div>
           <div className={styles.row}>
-            <span>Animations</span>
-            <button
-              type="button"
-              onClick={() => onChange({ visual: { animations: !settings.visual.animations } })}
-            >
-              {toggleLabel(settings.visual.animations)}
+            <span>{t('settings.animations')}</span>
+            <button type="button" onClick={() => onChange({ visual: { animations: !settings.visual.animations } })}>
+              {toggleLabel(settings.visual.animations, onLabel, offLabel)}
             </button>
           </div>
           <div className={styles.row}>
-            <label htmlFor="blockStyle">Block style</label>
+            <label htmlFor="blockStyle">{t('settings.blockStyle')}</label>
             <select id="blockStyle" value={settings.visual.blockStyle} onChange={onBlockStyleChange}>
               {BLOCK_STYLE_PRESETS.map((preset) => (
                 <option key={preset.id} value={preset.id}>
-                  {preset.label}
+                  {t(getBlockStyleLabelKey(preset.id))}
                 </option>
               ))}
             </select>
           </div>
           <div className={styles.row}>
-            <label htmlFor="theme">Theme</label>
+            <label htmlFor="theme">{t('settings.theme')}</label>
             <select id="theme" value={settings.visual.theme} onChange={onThemeChange}>
               {THEME_PRESETS.map((preset) => (
                 <option key={preset.id} value={preset.id}>
-                  {preset.label}
+                  {t(getThemeLabelKey(preset.id))}
                 </option>
               ))}
             </select>
           </div>
           <div className={styles.row}>
-            <label htmlFor="selectedSkin">Skin</label>
+            <label htmlFor="selectedSkin">{t('settings.skin')}</label>
             <select id="selectedSkin" value={settings.visual.selectedSkin} onChange={onSkinChange}>
               {SKIN_PRESETS.map((skin) => (
                 <option key={skin.id} value={skin.id}>
-                  {skin.name}
+                  {t(getSkinNameKey(skin.id))}
                 </option>
               ))}
             </select>
@@ -253,31 +338,28 @@ export const SettingsPanel = ({
       </div>
 
       <div className={styles.group}>
-        <h3 className={styles.groupTitle}>Sound</h3>
+        <h3 className={styles.groupTitle}>{t('settings.section.sound')}</h3>
         <div className={styles.list}>
           <div className={styles.row}>
-            <span>SFX</span>
+            <span>{t('settings.sfx')}</span>
             <button type="button" onClick={() => onChange({ sound: { sfx: !settings.sound.sfx } })}>
-              {toggleLabel(settings.sound.sfx)}
+              {toggleLabel(settings.sound.sfx, onLabel, offLabel)}
             </button>
           </div>
           <div className={styles.row}>
-            <span>Music</span>
+            <span>{t('settings.music')}</span>
             <button type="button" onClick={() => onChange({ sound: { music: !settings.sound.music } })}>
-              {toggleLabel(settings.sound.music)}
+              {toggleLabel(settings.sound.music, onLabel, offLabel)}
             </button>
           </div>
           <div className={styles.row}>
-            <span>Vibration</span>
-            <button
-              type="button"
-              onClick={() => onChange({ sound: { vibration: !settings.sound.vibration } })}
-            >
-              {toggleLabel(settings.sound.vibration)}
+            <span>{t('settings.vibration')}</span>
+            <button type="button" onClick={() => onChange({ sound: { vibration: !settings.sound.vibration } })}>
+              {toggleLabel(settings.sound.vibration, onLabel, offLabel)}
             </button>
           </div>
           <div className={styles.row}>
-            <label htmlFor="volume">Volume</label>
+            <label htmlFor="volume">{t('settings.volume')}</label>
             <input
               id="volume"
               type="range"
@@ -293,13 +375,13 @@ export const SettingsPanel = ({
 
       <div className={styles.group}>
         <div className={styles.keybindHeader}>
-          <h3 className={styles.groupTitle}>Keybinds</h3>
+          <h3 className={styles.groupTitle}>{t('settings.section.keybinds')}</h3>
           <div className={styles.keybindActions}>
             <button type="button" onClick={onBindingReset}>
-              Reset keybinds
+              {t('settings.resetKeybinds')}
             </button>
             <button type="button" onClick={onFullReset}>
-              Reset all
+              {t('settings.resetAll')}
             </button>
           </div>
         </div>
@@ -307,15 +389,15 @@ export const SettingsPanel = ({
           {GAME_ACTIONS.map((action) => (
             <div key={action} className={styles.keybindRow}>
               <div>
-                <div className={styles.keybindLabel}>{GAME_ACTION_LABELS[action]}</div>
+                <div className={styles.keybindLabel}>{t(getActionLabelKey(action))}</div>
                 <div className={styles.keybindValue}>
-                  {bindingAction === action ? 'Press new key...' : formatKeyCode(settings.controls.keybinds[action])}
+                  {bindingAction === action ? t('settings.pressNewKey') : formatKeyCode(settings.controls.keybinds[action])}
                 </div>
               </div>
               <div className={styles.keybindButtons}>
                 {bindingAction === action ? (
                   <button type="button" onClick={() => setBindingAction(null)}>
-                    Cancel
+                    {t('common.cancel')}
                   </button>
                 ) : (
                   <button
@@ -325,7 +407,7 @@ export const SettingsPanel = ({
                       setBindingAction(action)
                     }}
                   >
-                    Change
+                    {t('common.change')}
                   </button>
                 )}
               </div>

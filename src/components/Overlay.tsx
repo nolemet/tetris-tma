@@ -1,5 +1,6 @@
-import { calculateGameRating, formatAveragePieceTime, formatDuration } from '../game/results'
-import type { GameResult, GameState } from '../types'
+import { calculateGameRating, formatAveragePieceTime } from '../game/results'
+import { useI18n } from '../i18n'
+import type { GameMode, GameResult, GameState } from '../types'
 import styles from './Overlay.module.css'
 
 interface OverlayProps {
@@ -17,6 +18,10 @@ interface OverlayProps {
   onOpenAnalysis?: () => void
 }
 
+const getModeLabelKey = (mode: GameMode) => {
+  return mode === 'vsBot' ? ('mode.vsBot' as const) : ('mode.classic' as const)
+}
+
 export const Overlay = ({
   state,
   score,
@@ -31,6 +36,8 @@ export const Overlay = ({
   onShare,
   onOpenAnalysis,
 }: OverlayProps) => {
+  const { t, formatInteger, formatDuration } = useI18n()
+
   if (state === 'PLAYING') {
     return null
   }
@@ -38,10 +45,10 @@ export const Overlay = ({
   if (state === 'START') {
     return (
       <div className={styles.overlay}>
-        <h2 className={styles.title}>Ready?</h2>
-        <p className={styles.text}>Tap to rotate, swipe to move, and open Settings to tune controls and keybinds.</p>
+        <h2 className={styles.title}>{t('overlay.readyTitle')}</h2>
+        <p className={styles.text}>{t('overlay.readyText')}</p>
         <button type="button" className={styles.primary} onClick={onStart}>
-          Start game
+          {t('overlay.startGame')}
         </button>
       </div>
     )
@@ -50,13 +57,13 @@ export const Overlay = ({
   if (state === 'PAUSED') {
     return (
       <div className={styles.overlay}>
-        <h2 className={styles.title}>Paused</h2>
+        <h2 className={styles.title}>{t('overlay.paused')}</h2>
         <div className={styles.buttonRow}>
           <button type="button" className={styles.primary} onClick={onResume}>
-            Resume
+            {t('common.resume')}
           </button>
           <button type="button" className={styles.secondary} onClick={onRestart}>
-            New game
+            {t('common.newGame')}
           </button>
         </div>
       </div>
@@ -67,61 +74,63 @@ export const Overlay = ({
 
   return (
     <div className={styles.overlay}>
-      <h2 className={styles.title}>Game over</h2>
-      <p className={styles.text}>Score: {score}</p>
+      <h2 className={styles.title}>{t('overlay.gameOver')}</h2>
+      <p className={styles.text}>{t('common.score')}: {formatInteger(score)}</p>
       <p className={styles.text}>
-        Level: {level} • Lines: {lines}
+        {t('common.level')}: {formatInteger(level)} · {t('common.lines')}: {formatInteger(lines)}
       </p>
-      {isNewRecord ? <p className={styles.text}>New high score!</p> : null}
+      {isNewRecord ? <p className={styles.text}>{t('overlay.newHighScore')}</p> : null}
       {gameResult ? (
         <>
           <dl className={styles.statsGrid}>
             <div className={styles.statRow}>
-              <dt>Pieces</dt>
-              <dd>{gameResult.piecesPlaced}</dd>
+              <dt>{t('common.pieces')}</dt>
+              <dd>{formatInteger(gameResult.piecesPlaced)}</dd>
             </div>
             <div className={styles.statRow}>
-              <dt>Time</dt>
+              <dt>{t('common.time')}</dt>
               <dd>{formatDuration(gameResult.timePlayedMs)}</dd>
             </div>
             <div className={styles.statRow}>
-              <dt>Tetrises</dt>
-              <dd>{gameResult.tetrises}</dd>
+              <dt>{t('common.tetrises')}</dt>
+              <dd>{formatInteger(gameResult.tetrises)}</dd>
             </div>
             <div className={styles.statRow}>
-              <dt>Max combo</dt>
-              <dd>{gameResult.maxCombo}</dd>
+              <dt>{t('overlay.maxCombo')}</dt>
+              <dd>{formatInteger(gameResult.maxCombo)}</dd>
             </div>
             <div className={styles.statRow}>
-              <dt>Avg / piece</dt>
+              <dt>{t('overlay.avgPerPiece')}</dt>
               <dd>{formatAveragePieceTime(gameResult.averageTimePerPieceMs)}</dd>
             </div>
             <div className={styles.statRow}>
-              <dt>Rating</dt>
-              <dd>{rating}</dd>
+              <dt>{t('common.rating')}</dt>
+              <dd>{formatInteger(rating)}</dd>
             </div>
             <div className={styles.statRow}>
-              <dt>Grade</dt>
+              <dt>{t('common.grade')}</dt>
               <dd>{gameResult.grade}</dd>
             </div>
             <div className={styles.statRow}>
-              <dt>Holes</dt>
-              <dd>{gameResult.holesCreated}</dd>
+              <dt>{t('overlay.holes')}</dt>
+              <dd>{formatInteger(gameResult.holesCreated)}</dd>
             </div>
           </dl>
-          <p className={styles.meta}>Mode: {gameResult.mode} • Seed: {gameResult.seed}</p>
+          <p className={styles.meta}>
+            {t('common.mode')}: {t(getModeLabelKey(gameResult.mode))} · {t('common.seed')}: {gameResult.seed}
+          </p>
         </>
       ) : null}
       <div className={styles.buttonRow}>
         <button type="button" className={styles.primary} onClick={onRestart}>
-          Try again
+          {t('overlay.tryAgain')}
         </button>
         <button type="button" className={styles.secondary} onClick={onShare}>
-          Share result
+          {t('overlay.shareResult')}
         </button>
         {analysisAvailable && onOpenAnalysis ? (
           <button type="button" className={styles.secondary} onClick={onOpenAnalysis}>
-            Разбор партии
+            {t('overlay.gameAnalysis')}
           </button>
         ) : null}
       </div>

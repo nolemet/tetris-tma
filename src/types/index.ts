@@ -8,7 +8,13 @@ export type ThemeId = 'DEFAULT_DARK' | 'AMOLED' | 'RETRO'
 
 export type SkinId = 'classic' | 'neon' | 'ice' | 'fire' | 'pixel' | 'telegramBlue'
 
-export type GameMode = 'classic'
+export type UiLanguage = 'ru' | 'en'
+
+export type BotDifficulty = 'easy' | 'medium' | 'hard' | 'expert'
+
+export type MatchResult = 'win' | 'loss' | 'draw'
+
+export type GameMode = 'classic' | 'vsBot'
 
 export type GameAction =
   | 'moveLeft'
@@ -76,6 +82,10 @@ export interface SoundSettings {
   volume: number
 }
 
+export interface UiSettings {
+  language: UiLanguage
+}
+
 export interface GameStats {
   score: number
   level: number
@@ -112,6 +122,13 @@ export interface GameResult extends GameStats {
   grade: GameGrade
   rating: number
   replayId?: string | null
+  botDifficulty?: BotDifficulty | null
+  botScore?: number | null
+  matchResult?: MatchResult | null
+  eloBefore?: number | null
+  eloAfter?: number | null
+  eloChange?: number | null
+  botRating?: number | null
 }
 
 export interface GameSettings {
@@ -120,6 +137,7 @@ export interface GameSettings {
   gameplay: GameplaySettings
   visual: VisualSettings
   sound: SoundSettings
+  ui: UiSettings
 }
 
 export interface TouchPoint {

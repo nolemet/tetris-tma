@@ -1,6 +1,6 @@
-import type { ActivePiece, BoardMatrix, GameAction, TetrominoType } from '../types'
+import type { ActivePiece, BoardMatrix, BotDifficulty, GameAction, TetrominoType } from '../types'
 
-export type BotDifficulty = 'easy' | 'medium' | 'hard' | 'expert'
+export type { BotDifficulty } from '../types'
 
 export type MoveSeverity = 'good' | 'inaccuracy' | 'mistake' | 'blunder'
 

@@ -1,4 +1,5 @@
 import type { TouchEvent } from 'react'
+import { useI18n } from '../i18n'
 import type { GameState, GameStats } from '../types'
 import styles from './Stats.module.css'
 
@@ -27,9 +28,10 @@ export const Stats = ({
   onShareResult,
   layout = 'stacked',
 }: StatsProps) => {
+  const { t, formatInteger } = useI18n()
   const pauseDisabled = gameState === 'START' || gameState === 'GAME_OVER'
   const shareDisabled = gameState !== 'GAME_OVER'
-  const pauseLabel = gameState === 'PAUSED' ? 'Resume' : 'Pause'
+  const pauseLabel = gameState === 'PAUSED' ? t('common.resume') : t('common.pause')
   const stopTouchPropagation = (event: TouchEvent<HTMLElement>) => {
     event.stopPropagation()
   }
@@ -38,35 +40,35 @@ export const Stats = ({
 
   return (
     <section className={sectionClass} onTouchStart={stopTouchPropagation} onTouchEnd={stopTouchPropagation}>
-      <h2 className={styles.title}>STATS</h2>
+      <h2 className={styles.title}>{t('game.stats')}</h2>
       <dl className={styles.list}>
         <div className={styles.row}>
-          <dt>Score</dt>
-          <dd>{stats.score}</dd>
+          <dt>{t('common.score')}</dt>
+          <dd>{formatInteger(stats.score)}</dd>
         </div>
         <div className={styles.row}>
-          <dt>Level</dt>
-          <dd>{stats.level}</dd>
+          <dt>{t('common.level')}</dt>
+          <dd>{formatInteger(stats.level)}</dd>
         </div>
         <div className={styles.row}>
-          <dt>Lines</dt>
-          <dd>{stats.lines}</dd>
+          <dt>{t('common.lines')}</dt>
+          <dd>{formatInteger(stats.lines)}</dd>
         </div>
         <div className={styles.row}>
-          <dt>High score</dt>
-          <dd>{stats.highScore}</dd>
+          <dt>{t('game.highScore')}</dt>
+          <dd>{formatInteger(stats.highScore)}</dd>
         </div>
         <div className={styles.row}>
-          <dt>Combo</dt>
-          <dd>{comboCount > 0 ? `x${comboCount}` : '-'}</dd>
+          <dt>{t('game.combo')}</dt>
+          <dd>{comboCount > 0 ? `x${formatInteger(comboCount)}` : '-'}</dd>
         </div>
         <div className={styles.row}>
-          <dt>Combo grace</dt>
-          <dd>{comboCount > 0 ? `${comboGrace}/3` : '-'}</dd>
+          <dt>{t('game.comboGrace')}</dt>
+          <dd>{comboCount > 0 ? `${formatInteger(comboGrace)}/3` : '-'}</dd>
         </div>
         <div className={styles.row}>
-          <dt>Back-to-back</dt>
-          <dd>{backToBackActive ? 'Active' : '-'}</dd>
+          <dt>{t('game.backToBack')}</dt>
+          <dd>{backToBackActive ? t('game.active') : '-'}</dd>
         </div>
       </dl>
       <div className={styles.actions}>
@@ -87,7 +89,7 @@ export const Stats = ({
           onTouchStart={stopTouchPropagation}
           onTouchEnd={stopTouchPropagation}
         >
-          New game
+          {t('common.newGame')}
         </button>
         <button
           type="button"
@@ -97,7 +99,7 @@ export const Stats = ({
           onTouchStart={stopTouchPropagation}
           onTouchEnd={stopTouchPropagation}
         >
-          Share result
+          {t('overlay.shareResult')}
         </button>
         <button
           type="button"
@@ -106,7 +108,7 @@ export const Stats = ({
           onTouchStart={stopTouchPropagation}
           onTouchEnd={stopTouchPropagation}
         >
-          Menu
+          {t('common.menu')}
         </button>
       </div>
     </section>

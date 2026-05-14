@@ -1,4 +1,5 @@
-import { formatDuration } from '../game/results'
+import type { LocalEloState } from '../elo'
+import { useI18n } from '../i18n'
 import type { GameResult } from '../types'
 import type { TelegramWebAppUser } from '../types/telegram'
 import styles from './ProfilePanel.module.css'
@@ -6,6 +7,7 @@ import styles from './ProfilePanel.module.css'
 interface ProfilePanelProps {
   user: TelegramWebAppUser | null
   history: GameResult[]
+  eloState: LocalEloState
   onOpenHistory: () => void
   onOpenSkins: () => void
   onBack: () => void
@@ -23,7 +25,8 @@ const getBestGrade = (history: GameResult[]): GameResult['grade'] | null => {
   }, null)
 }
 
-export const ProfilePanel = ({ user, history, onOpenHistory, onOpenSkins, onBack }: ProfilePanelProps) => {
+export const ProfilePanel = ({ user, history, eloState, onOpenHistory, onOpenSkins, onBack }: ProfilePanelProps) => {
+  const { t, formatInteger, formatDuration, formatDateTime, formatPercent } = useI18n()
   const totalGames = history.length
   const highScore = history.reduce((best, item) => Math.max(best, item.score), 0)
   const bestRating = history.reduce((best, item) => Math.max(best, item.rating), 0)
@@ -35,86 +38,121 @@ export const ProfilePanel = ({ user, history, onOpenHistory, onOpenSkins, onBack
   const totalTimePlayed = history.reduce((sum, item) => sum + item.timePlayedMs, 0)
   const bestGrade = getBestGrade(history)
   const lastPlayedAt = history[0]?.endedAt ?? null
+  const winRate = eloState.gamesPlayed > 0 ? (eloState.wins / eloState.gamesPlayed) * 100 : 0
 
   return (
     <section className={styles.card}>
       <div className={styles.header}>
         <div>
-          <h2 className={styles.title}>Профиль игрока</h2>
-          <p className={styles.subtitle}>Profile stats are stored locally on this device.</p>
+          <h2 className={styles.title}>{t('profile.title')}</h2>
+          <p className={styles.subtitle}>{t('profile.localOnly')}</p>
         </div>
         <button type="button" className={styles.backButton} onClick={onBack}>
-          Назад
+          {t('common.back')}
         </button>
       </div>
 
       <div className={styles.identity}>
         <div className={styles.avatar}>{user?.first_name?.slice(0, 1).toUpperCase() ?? 'W'}</div>
         <div>
-          <h3 className={styles.identityName}>{user ? `${user.first_name} ${user.last_name ?? ''}`.trim() : 'Web player'}</h3>
+          <h3 className={styles.identityName}>{user ? `${user.first_name} ${user.last_name ?? ''}`.trim() : t('profile.webPlayer')}</h3>
           <p className={styles.identityMeta}>
-            {user?.username ? `@${user.username} • Telegram mode` : user ? 'Telegram mode' : 'Web mode'}
+            {user?.username ? `@${user.username} · ${t('profile.telegramMode')}` : user ? t('profile.telegramMode') : t('profile.webMode')}
           </p>
         </div>
       </div>
 
       {totalGames === 0 ? (
-        <div className={styles.emptyState}>Пока нет сыгранных игр</div>
+        <div className={styles.emptyState}>{t('profile.empty')}</div>
       ) : (
         <dl className={styles.grid}>
           <div className={styles.stat}>
-            <dt>Total games</dt>
-            <dd>{totalGames}</dd>
+            <dt>{t('profile.totalGames')}</dt>
+            <dd>{formatInteger(totalGames)}</dd>
           </div>
           <div className={styles.stat}>
-            <dt>High score</dt>
-            <dd>{highScore}</dd>
+            <dt>{t('profile.highScore')}</dt>
+            <dd>{formatInteger(highScore)}</dd>
           </div>
           <div className={styles.stat}>
-            <dt>Best grade</dt>
+            <dt>{t('profile.bestGrade')}</dt>
             <dd>{bestGrade ?? '-'}</dd>
           </div>
           <div className={styles.stat}>
-            <dt>Best rating</dt>
-            <dd>{bestRating}</dd>
+            <dt>{t('profile.bestRating')}</dt>
+            <dd>{formatInteger(bestRating)}</dd>
           </div>
           <div className={styles.stat}>
-            <dt>Total lines</dt>
-            <dd>{totalLines}</dd>
+            <dt>{t('profile.totalLines')}</dt>
+            <dd>{formatInteger(totalLines)}</dd>
           </div>
           <div className={styles.stat}>
-            <dt>Total pieces</dt>
-            <dd>{totalPieces}</dd>
+            <dt>{t('profile.totalPieces')}</dt>
+            <dd>{formatInteger(totalPieces)}</dd>
           </div>
           <div className={styles.stat}>
-            <dt>Total tetrises</dt>
-            <dd>{totalTetrises}</dd>
+            <dt>{t('profile.totalTetrises')}</dt>
+            <dd>{formatInteger(totalTetrises)}</dd>
           </div>
           <div className={styles.stat}>
-            <dt>Best combo</dt>
-            <dd>{bestCombo}</dd>
+            <dt>{t('profile.bestCombo')}</dt>
+            <dd>{formatInteger(bestCombo)}</dd>
           </div>
           <div className={styles.stat}>
-            <dt>Average score</dt>
-            <dd>{averageScore}</dd>
+            <dt>{t('profile.averageScore')}</dt>
+            <dd>{formatInteger(averageScore)}</dd>
           </div>
           <div className={styles.stat}>
-            <dt>Total time played</dt>
+            <dt>{t('profile.totalTimePlayed')}</dt>
             <dd>{formatDuration(totalTimePlayed)}</dd>
           </div>
           <div className={styles.statWide}>
-            <dt>Last played</dt>
-            <dd>{lastPlayedAt ? new Date(lastPlayedAt).toLocaleString() : '-'}</dd>
+            <dt>{t('profile.lastPlayed')}</dt>
+            <dd>{lastPlayedAt ? formatDateTime(lastPlayedAt) : '-'}</dd>
           </div>
         </dl>
       )}
 
+      <section className={styles.eloCard}>
+        <h3 className={styles.eloTitle}>{t('profile.eloTitle')}</h3>
+        <dl className={styles.eloGrid}>
+          <div className={styles.stat}>
+            <dt>{t('profile.currentElo')}</dt>
+            <dd>{formatInteger(eloState.playerRating)}</dd>
+          </div>
+          <div className={styles.stat}>
+            <dt>{t('profile.peakElo')}</dt>
+            <dd>{formatInteger(eloState.peakRating)}</dd>
+          </div>
+          <div className={styles.stat}>
+            <dt>{t('profile.vsBotGames')}</dt>
+            <dd>{formatInteger(eloState.gamesPlayed)}</dd>
+          </div>
+          <div className={styles.stat}>
+            <dt>{t('profile.wins')}</dt>
+            <dd>{formatInteger(eloState.wins)}</dd>
+          </div>
+          <div className={styles.stat}>
+            <dt>{t('profile.losses')}</dt>
+            <dd>{formatInteger(eloState.losses)}</dd>
+          </div>
+          <div className={styles.stat}>
+            <dt>{t('profile.draws')}</dt>
+            <dd>{formatInteger(eloState.draws)}</dd>
+          </div>
+          <div className={styles.statWide}>
+            <dt>{t('profile.winRate')}</dt>
+            <dd>{formatPercent(winRate)}</dd>
+          </div>
+        </dl>
+      </section>
+
       <div className={styles.actions}>
         <button type="button" className={styles.primaryButton} onClick={onOpenHistory}>
-          История игр
+          {t('mainMenu.history')}
         </button>
         <button type="button" className={styles.secondaryButton} onClick={onOpenSkins}>
-          Скины
+          {t('mainMenu.skins')}
         </button>
       </div>
     </section>

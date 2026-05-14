@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FEEDBACK_ANIMATION_MS, BOARD_LOCK_FLASH_MS, HARD_DROP_FLASH_MS } from './animations/constants'
+import { BOARD_LOCK_FLASH_MS, FEEDBACK_ANIMATION_MS, HARD_DROP_FLASH_MS } from './animations/constants'
+import styles from './App.module.css'
 import { Board } from './components/Board'
 import { ControlPad } from './components/ControlPad'
-import { GameFeedback } from './components/GameFeedback'
 import { GameAnalysisPanel } from './components/GameAnalysisPanel'
+import { GameFeedback } from './components/GameFeedback'
 import { GameHistoryPanel } from './components/GameHistoryPanel'
 import { GameModesPanel } from './components/GameModesPanel'
 import { MainMenu } from './components/MainMenu'
@@ -14,12 +15,15 @@ import { ReplayViewer } from './components/ReplayViewer'
 import { SettingsPanel } from './components/SettingsPanel'
 import { SkinsPanel } from './components/SkinsPanel'
 import { Stats } from './components/Stats'
+import { VsBotGameScreen } from './components/VsBotGameScreen'
+import { loadEloState } from './elo'
 import { CLASSIC_MODE_CONFIG } from './game/modes'
 import { generateGameSeed } from './game/seededRandom'
 import { useBoardRowFit } from './hooks/useBoardRowFit'
 import { useControls } from './hooks/useControls'
 import { useGame } from './hooks/useGame'
 import { useTelegram } from './hooks/useTelegram'
+import { I18nProvider, useCreateI18n } from './i18n'
 import { createReplayRecorder, finalizeReplay, recordReplayAction, type ReplayRecorderSession } from './replays/recorder'
 import { clearReplays, loadReplays, saveReplay } from './replays/replayStorage'
 import { isReplayV3 } from './replays/types'
@@ -29,24 +33,40 @@ import { loadSettings, resetSettings, updateSettings } from './settings/storage'
 import { applySkinPreset } from './skins/applySkin'
 import { soundManager } from './sound/manager'
 import { applyThemePreset } from './theme/applyTheme'
-import type { GameAction, GameSettings } from './types'
+import type { BotDifficulty, GameAction, GameSettings } from './types'
 import { shareResult } from './utils/share'
-import styles from './App.module.css'
 
-type AppScreen = 'menu' | 'game' | 'modes' | 'settings' | 'history' | 'replay' | 'skins' | 'profile' | 'analysis'
+type AppScreen =
+  | 'menu'
+  | 'game'
+  | 'modes'
+  | 'settings'
+  | 'history'
+  | 'replay'
+  | 'skins'
+  | 'profile'
+  | 'analysis'
+  | 'vsBotGame'
 
 function App() {
   const { webApp, user } = useTelegram()
   const [settings, setSettings] = useState<GameSettings>(() => loadSettings())
   const [history, setHistory] = useState(() => loadGameHistory())
   const [replays, setReplays] = useState(() => loadReplays())
+  const [eloState, setEloState] = useState(() => loadEloState())
   const [screen, setScreen] = useState<AppScreen>('menu')
   const [selectedReplayId, setSelectedReplayId] = useState<string | null>(null)
   const [latestCompletedReplayId, setLatestCompletedReplayId] = useState<string | null>(null)
+  const [selectedVsBotDifficulty, setSelectedVsBotDifficulty] = useState<BotDifficulty>('medium')
+  const i18n = useCreateI18n(settings.ui.language)
+  const { t } = i18n
+
   const game = useGame({
     startLevel: settings.gameplay.startLevel,
     animationsEnabled: settings.visual.animations,
+    mode: 'classic',
   })
+
   const [feedbackMessages, setFeedbackMessages] = useState<
     Array<{ id: number; text: string; tone: 'combo' | 'b2b' | 'level' | 'neutral' }>
   >([])
@@ -55,9 +75,9 @@ function App() {
   const [gameOverPulse, setGameOverPulse] = useState(false)
   const activeReplayRef = useRef<ReplayRecorderSession | null>(null)
   const savedResultIdRef = useRef<string | null>(null)
+
   const dispatchCoreGameAction = game.dispatchGameAction
   const startCoreGame = game.startGame
-
   const isGameScreen = screen === 'game'
   const isCenteredScreen = screen === 'menu' || screen === 'modes'
   const selectedSkinPreset = useMemo(() => applySkinPreset(settings.visual.selectedSkin), [settings.visual.selectedSkin])
@@ -96,7 +116,7 @@ function App() {
     if (feedback.comboCount >= 2 && feedback.clearedLines > 0) {
       messages.push({
         id: feedback.id * 10 + 1,
-        text: `Combo x${feedback.comboCount}`,
+        text: t('game.feedback.combo', { count: feedback.comboCount }),
         tone: 'combo',
       })
       soundManager.play('combo', settings.sound)
@@ -104,7 +124,7 @@ function App() {
     if (feedback.backToBackAwarded && feedback.clearedLines === 4) {
       messages.push({
         id: feedback.id * 10 + 2,
-        text: 'Back-to-Back',
+        text: t('game.feedback.backToBack'),
         tone: 'b2b',
       })
       soundManager.play('backToBack', settings.sound)
@@ -112,7 +132,7 @@ function App() {
     if (feedback.levelUp) {
       messages.push({
         id: feedback.id * 10 + 3,
-        text: `Level ${game.stats.level}!`,
+        text: t('game.feedback.levelUp', { level: game.stats.level }),
         tone: 'level',
       })
       soundManager.play('levelUp', settings.sound)
@@ -140,7 +160,7 @@ function App() {
         }, FEEDBACK_ANIMATION_MS)
       })
     }
-  }, [game.lastLockFeedback, game.stats.level, isGameScreen, settings.sound, settings.visual.animations])
+  }, [game.lastLockFeedback, game.stats.level, isGameScreen, settings.sound, settings.visual.animations, t])
 
   useEffect(() => {
     if (game.lockFlashKey === 0 || !isGameScreen) {
@@ -269,8 +289,9 @@ function App() {
         isNewRecord: game.isNewRecord,
       },
       window.location.href,
+      settings.ui.language,
     )
-  }, [game.isNewRecord, game.stats.level, game.stats.lines, game.stats.score, playButtonClick, webApp])
+  }, [game.isNewRecord, game.stats.level, game.stats.lines, game.stats.score, playButtonClick, settings.ui.language, webApp])
 
   const handlePlayClassic = useCallback(() => {
     playButtonClick()
@@ -385,7 +406,6 @@ function App() {
     if (!latestCompletedReplayId) {
       return
     }
-
     onOpenAnalysis(latestCompletedReplayId)
   }, [latestCompletedReplayId, onOpenAnalysis])
 
@@ -417,6 +437,15 @@ function App() {
     [playButtonClick],
   )
 
+  const onPlayVsBot = useCallback(
+    (difficulty: BotDifficulty) => {
+      playButtonClick()
+      setSelectedVsBotDifficulty(difficulty)
+      setScreen('vsBotGame')
+    },
+    [playButtonClick],
+  )
+
   const { bindBoardControls } = useControls({
     gameState: game.state,
     keybinds: settings.controls.keybinds,
@@ -425,6 +454,7 @@ function App() {
     enableTouchControls: isGameScreen && settings.controls.enableTouchControls,
     dispatchGameAction,
   })
+
   const boardControls = bindBoardControls()
   const { sectionRef, outerRef, innerRef, rowRef } = useBoardRowFit()
 
@@ -440,180 +470,201 @@ function App() {
   const mainClassName = [styles.main, isCenteredScreen ? styles.centerMain : ''].filter(Boolean).join(' ')
 
   return (
-    <div className={styles.app}>
-      <header className={styles.header}>
-        <h1 className={styles.title}>TETRIS</h1>
-        <p className={styles.caption}>{webApp ? 'Telegram Mini App' : 'Web mode'}</p>
-      </header>
+    <I18nProvider value={i18n}>
+      <div className={styles.app}>
+        <header className={styles.header}>
+          <h1 className={styles.title}>TETRIS</h1>
+          <p className={styles.caption}>{webApp ? t('app.caption.telegram') : t('app.caption.web')}</p>
+        </header>
 
-      <main className={mainClassName}>
-        {screen === 'menu' ? (
-          <MainMenu
-            onPlay={handlePlayClassic}
-            onOpenHistory={onOpenHistory}
-            onOpenProfile={onOpenProfile}
-            onOpenSkins={onOpenSkins}
-            onOpenModes={onOpenModes}
-            onOpenSettings={onOpenSettings}
-          />
-        ) : null}
-
-        {screen === 'modes' ? <GameModesPanel onBack={onBackToMenu} /> : null}
-
-        {screen === 'settings' ? (
-          <section className={styles.screenPanel}>
-            <div className={styles.screenPanelHeader}>
-              <button type="button" className={styles.backButton} onClick={onBackToMenu}>
-                Back
-              </button>
-            </div>
-            <SettingsPanel
-              settings={settings}
-              onChange={onSettingsChange}
-              onResetKeybinds={onResetKeybinds}
-              onResetAllSettings={onResetAllSettings}
+        <main className={mainClassName}>
+          {screen === 'menu' ? (
+            <MainMenu
+              onPlay={handlePlayClassic}
+              onOpenHistory={onOpenHistory}
+              onOpenProfile={onOpenProfile}
+              onOpenSkins={onOpenSkins}
+              onOpenModes={onOpenModes}
+              onOpenSettings={onOpenSettings}
             />
-          </section>
-        ) : null}
+          ) : null}
 
-        {screen === 'history' ? (
-          <GameHistoryPanel
-            history={history}
-            availableReplayIds={availableReplayIds}
-            availableAnalysisIds={availableAnalysisIds}
-            onOpenReplay={onOpenReplay}
-            onOpenAnalysis={onOpenAnalysis}
-            onBack={onBackToMenu}
-            onClearHistory={onClearStoredHistory}
-          />
-        ) : null}
+          {screen === 'modes' ? (
+            <GameModesPanel onBack={onBackToMenu} onPlayClassic={handlePlayClassic} onPlayVsBot={onPlayVsBot} />
+          ) : null}
 
-        {screen === 'skins' ? (
-          <SkinsPanel selectedSkin={settings.visual.selectedSkin} onSelectSkin={onSelectSkin} onBack={onBackToMenu} />
-        ) : null}
+          {screen === 'settings' ? (
+            <section className={styles.screenPanel}>
+              <div className={styles.screenPanelHeader}>
+                <button type="button" className={styles.backButton} onClick={onBackToMenu}>
+                  {t('common.back')}
+                </button>
+              </div>
+              <SettingsPanel
+                settings={settings}
+                onChange={onSettingsChange}
+                onResetKeybinds={onResetKeybinds}
+                onResetAllSettings={onResetAllSettings}
+              />
+            </section>
+          ) : null}
 
-        {screen === 'profile' ? (
-          <ProfilePanel
-            user={user}
-            history={history}
-            onOpenHistory={onOpenHistory}
-            onOpenSkins={onOpenSkins}
-            onBack={onBackToMenu}
-          />
-        ) : null}
+          {screen === 'history' ? (
+            <GameHistoryPanel
+              history={history}
+              availableReplayIds={availableReplayIds}
+              availableAnalysisIds={availableAnalysisIds}
+              onOpenReplay={onOpenReplay}
+              onOpenAnalysis={onOpenAnalysis}
+              onBack={onBackToMenu}
+              onClearHistory={onClearStoredHistory}
+            />
+          ) : null}
 
-        {screen === 'replay' ? (
-          <ReplayViewer
-            key={selectedReplayId ?? 'replay-missing'}
-            replay={selectedReplay}
-            showGrid={settings.visual.showGrid}
-            blockStyle={settings.visual.blockStyle}
-            pieceColors={selectedSkinPreset.pieceColors}
-            ghostColor={selectedSkinPreset.ghostColor}
-            onBackToHistory={onBackToHistory}
-            onBackToMenu={onBackToMenu}
-          />
-        ) : null}
+          {screen === 'skins' ? (
+            <SkinsPanel selectedSkin={settings.visual.selectedSkin} onSelectSkin={onSelectSkin} onBack={onBackToMenu} />
+          ) : null}
 
-        {screen === 'analysis' ? (
-          <GameAnalysisPanel
-            replay={selectedReplay}
-            pieceColors={selectedSkinPreset.pieceColors}
-            onOpenReplay={() => {
-              if (selectedReplayId) {
-                onOpenReplay(selectedReplayId)
-              }
-            }}
-            onBackToHistory={onBackToHistory}
-            onBackToMenu={onBackToMenu}
-          />
-        ) : null}
+          {screen === 'profile' ? (
+            <ProfilePanel
+              user={user}
+              history={history}
+              eloState={eloState}
+              onOpenHistory={onOpenHistory}
+              onOpenSkins={onOpenSkins}
+              onBack={onBackToMenu}
+            />
+          ) : null}
 
-        {screen === 'game' ? (
-          <>
-            <section ref={sectionRef} className={styles.boardSection}>
-              <div ref={outerRef} className={styles.scaleOuter}>
-                <div ref={innerRef} className={styles.scaleInner}>
-                  <div ref={rowRef} className={styles.boardRow}>
-                    <div className={boardWrapClass}>
-                      <Board
-                        board={game.board}
-                        activePiece={game.activePiece}
-                        ghostPiece={settings.gameplay.ghostPiece ? game.ghostPiece : null}
-                        lineClearRows={game.lineClearRows}
-                        showGrid={settings.visual.showGrid}
-                        blockStyle={settings.visual.blockStyle}
-                        pieceColors={selectedSkinPreset.pieceColors}
-                        ghostColor={selectedSkinPreset.ghostColor}
-                        onTouchStart={boardControls.onTouchStart}
-                        onTouchEnd={boardControls.onTouchEnd}
-                      />
-                      <GameFeedback messages={feedbackMessages} />
-                      <Overlay
-                        state={game.state}
-                        score={game.stats.score}
-                        level={game.stats.level}
-                        lines={game.stats.lines}
-                        isNewRecord={game.isNewRecord}
-                        gameResult={game.completedGameResult}
-                        analysisAvailable={Boolean(
-                          latestCompletedReplay && isReplayV3(latestCompletedReplay) && latestCompletedReplay.moveEvents.length > 0,
-                        )}
-                        onStart={onStartGame}
-                        onResume={onTogglePause}
-                        onRestart={onRestartGame}
-                        onShare={handleShareResult}
-                        onOpenAnalysis={onOpenLatestAnalysis}
-                      />
-                    </div>
-                    <div className={styles.sideHud}>
-                      <Stats
-                        stats={game.stats}
-                        gameState={game.state}
-                        comboCount={game.comboCount}
-                        comboGrace={game.comboGrace}
-                        backToBackActive={game.backToBackActive}
-                        onBackToMenu={onBackToMenu}
-                        onTogglePause={onTogglePause}
-                        onNewGame={onRestartGame}
-                        onShareResult={handleShareResult}
-                        layout="sidebar"
-                      />
-                      {settings.gameplay.showNextPiece ? (
-                        <NextPiece
-                          pieceType={game.nextPieceType}
+          {screen === 'replay' ? (
+            <ReplayViewer
+              key={selectedReplayId ?? 'replay-missing'}
+              replay={selectedReplay}
+              showGrid={settings.visual.showGrid}
+              blockStyle={settings.visual.blockStyle}
+              pieceColors={selectedSkinPreset.pieceColors}
+              ghostColor={selectedSkinPreset.ghostColor}
+              onBackToHistory={onBackToHistory}
+              onBackToMenu={onBackToMenu}
+            />
+          ) : null}
+
+          {screen === 'analysis' ? (
+            <GameAnalysisPanel
+              replay={selectedReplay}
+              pieceColors={selectedSkinPreset.pieceColors}
+              onOpenReplay={() => {
+                if (selectedReplayId) {
+                  onOpenReplay(selectedReplayId)
+                }
+              }}
+              onBackToHistory={onBackToHistory}
+              onBackToMenu={onBackToMenu}
+            />
+          ) : null}
+
+          {screen === 'vsBotGame' ? (
+            <VsBotGameScreen
+              settings={settings}
+              difficulty={selectedVsBotDifficulty}
+              eloState={eloState}
+              pieceColors={selectedSkinPreset.pieceColors}
+              ghostColor={selectedSkinPreset.ghostColor}
+              onBackToMenu={onBackToMenu}
+              onHistoryChange={setHistory}
+              onReplaysChange={setReplays}
+              onEloChange={setEloState}
+              onOpenReplay={onOpenReplay}
+              onOpenAnalysis={onOpenAnalysis}
+            />
+          ) : null}
+
+          {screen === 'game' ? (
+            <>
+              <section ref={sectionRef} className={styles.boardSection}>
+                <div ref={outerRef} className={styles.scaleOuter}>
+                  <div ref={innerRef} className={styles.scaleInner}>
+                    <div ref={rowRef} className={styles.boardRow}>
+                      <div className={boardWrapClass}>
+                        <Board
+                          board={game.board}
+                          activePiece={game.activePiece}
+                          ghostPiece={settings.gameplay.ghostPiece ? game.ghostPiece : null}
+                          lineClearRows={game.lineClearRows}
+                          showGrid={settings.visual.showGrid}
+                          blockStyle={settings.visual.blockStyle}
                           pieceColors={selectedSkinPreset.pieceColors}
+                          ghostColor={selectedSkinPreset.ghostColor}
+                          onTouchStart={boardControls.onTouchStart}
+                          onTouchEnd={boardControls.onTouchEnd}
+                        />
+                        <GameFeedback messages={feedbackMessages} />
+                        <Overlay
+                          state={game.state}
+                          score={game.stats.score}
+                          level={game.stats.level}
+                          lines={game.stats.lines}
+                          isNewRecord={game.isNewRecord}
+                          gameResult={game.completedGameResult}
+                          analysisAvailable={Boolean(
+                            latestCompletedReplay && isReplayV3(latestCompletedReplay) && latestCompletedReplay.moveEvents.length > 0,
+                          )}
+                          onStart={onStartGame}
+                          onResume={onTogglePause}
+                          onRestart={onRestartGame}
+                          onShare={handleShareResult}
+                          onOpenAnalysis={onOpenLatestAnalysis}
+                        />
+                      </div>
+                      <div className={styles.sideHud}>
+                        <Stats
+                          stats={game.stats}
+                          gameState={game.state}
+                          comboCount={game.comboCount}
+                          comboGrace={game.comboGrace}
+                          backToBackActive={game.backToBackActive}
+                          onBackToMenu={onBackToMenu}
+                          onTogglePause={onTogglePause}
+                          onNewGame={onRestartGame}
+                          onShareResult={handleShareResult}
                           layout="sidebar"
                         />
-                      ) : null}
-                      {showHoldPreviewInCurrentMode ? (
-                        <NextPiece
-                          title="HOLD"
-                          pieceType={game.heldPieceType}
-                          pieceColors={selectedSkinPreset.pieceColors}
-                          layout="sidebar"
-                        />
-                      ) : null}
+                        {settings.gameplay.showNextPiece ? (
+                          <NextPiece
+                            pieceType={game.nextPieceType}
+                            pieceColors={selectedSkinPreset.pieceColors}
+                            layout="sidebar"
+                          />
+                        ) : null}
+                        {showHoldPreviewInCurrentMode ? (
+                          <NextPiece
+                            title={t('game.hold')}
+                            pieceType={game.heldPieceType}
+                            pieceColors={selectedSkinPreset.pieceColors}
+                            layout="sidebar"
+                          />
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            </section>
+              </section>
 
-            <ControlPad
-              state={game.state}
-              touchControlsEnabled={settings.controls.enableTouchControls}
-              showHoldButton={holdEnabledInCurrentMode}
-              onLeft={onMoveLeft}
-              onRight={onMoveRight}
-              onRotate={onRotate}
-              onSoftDrop={onSoftDrop}
-              onHardDrop={onHardDrop}
-            />
-          </>
-        ) : null}
-      </main>
-    </div>
+              <ControlPad
+                state={game.state}
+                touchControlsEnabled={settings.controls.enableTouchControls}
+                showHoldButton={holdEnabledInCurrentMode}
+                onLeft={onMoveLeft}
+                onRight={onMoveRight}
+                onRotate={onRotate}
+                onSoftDrop={onSoftDrop}
+                onHardDrop={onHardDrop}
+              />
+            </>
+          ) : null}
+        </main>
+      </div>
+    </I18nProvider>
   )
 }
 

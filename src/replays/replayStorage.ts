@@ -1,4 +1,4 @@
-import type { BoardMatrix, Cell, GameAction, GameGrade, TetrominoType } from '../types'
+import type { BoardMatrix, Cell, GameAction, GameGrade, GameMode, TetrominoType } from '../types'
 import type {
   GameReplay,
   GameReplayV1,
@@ -63,6 +63,10 @@ const getString = (value: unknown, fallback = ''): string => {
 
 const getPieceType = (value: unknown): TetrominoType | null => {
   return typeof value === 'string' && TETROMINO_TYPES.has(value as TetrominoType) ? (value as TetrominoType) : null
+}
+
+const getGameMode = (value: unknown): GameMode => {
+  return value === 'vsBot' ? 'vsBot' : 'classic'
 }
 
 const getGrade = (value: unknown, fallback: GameGrade = 'D'): GameGrade => {
@@ -308,7 +312,7 @@ const normalizeReplayV1 = (raw: Record<string, unknown>): GameReplayV1 | null =>
     version: 1,
     id: getString(raw.id),
     gameId: getString(raw.gameId),
-    mode: getString(raw.mode, 'classic') === 'classic' ? 'classic' : 'classic',
+    mode: getGameMode(raw.mode),
     seed: getString(raw.seed, 'unknown-seed'),
     startLevel: Math.max(1, getNumber(raw.startLevel, 1)),
     startedAt: getNumber(raw.startedAt),
@@ -330,7 +334,7 @@ const normalizeReplayV2 = (raw: Record<string, unknown>): GameReplayV2 | null =>
     version: 2,
     id: getString(raw.id),
     gameId: getString(raw.gameId),
-    mode: getString(raw.mode, 'classic') === 'classic' ? 'classic' : 'classic',
+    mode: getGameMode(raw.mode),
     seed: getString(raw.seed, 'unknown-seed'),
     startLevel: Math.max(1, getNumber(raw.startLevel, 1)),
     startedAt: getNumber(raw.startedAt),
@@ -355,7 +359,7 @@ const normalizeReplayV3 = (raw: Record<string, unknown>): GameReplayV3 | null =>
     version: 3,
     id: getString(raw.id),
     gameId: getString(raw.gameId),
-    mode: getString(raw.mode, 'classic') === 'classic' ? 'classic' : 'classic',
+    mode: getGameMode(raw.mode),
     seed: getString(raw.seed, 'unknown-seed'),
     startLevel: Math.max(1, getNumber(raw.startLevel, 1)),
     startedAt: getNumber(raw.startedAt),

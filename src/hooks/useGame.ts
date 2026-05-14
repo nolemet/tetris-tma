@@ -93,15 +93,17 @@ interface GameModel {
 interface UseGameOptions {
   startLevel: number
   animationsEnabled: boolean
+  mode?: GameMode
+  persistHighScore?: boolean
 }
 
-const GAME_MODE: GameMode = 'classic'
+const DEFAULT_GAME_MODE: GameMode = 'classic'
 // We keep replay capture lightweight: authoritative frames for exact results and visual frames
 // capped around 30fps, instead of storing 60 full board snapshots per second like a video.
 const VISUAL_CAPTURE_INTERVAL_MS = 1000 / 30
 const KEYFRAME_VISUAL_EVENTS = new Set<VisualFrameEvent>(['start', 'lock', 'lineClear', 'gameOver', 'hardDrop'])
 
-const createGameStats = (highScore: number, startLevel: number, seed: string): GameStats => {
+const createGameStats = (highScore: number, startLevel: number, seed: string, mode: GameMode): GameStats => {
   return {
     score: 0,
     level: startLevel,
@@ -122,13 +124,13 @@ const createGameStats = (highScore: number, startLevel: number, seed: string): G
     holesCreated: 0,
     timePlayedMs: 0,
     averageTimePerPieceMs: 0,
-    mode: GAME_MODE,
+    mode,
     seed,
   }
 }
 
-const createLobbyGenerator = (seed: string): { pieceGenerator: PieceGenerator; nextPieceType: TetrominoType } => {
-  const pieceGenerator = createPieceGenerator(seed, GAME_MODE)
+const createLobbyGenerator = (seed: string, mode: GameMode): { pieceGenerator: PieceGenerator; nextPieceType: TetrominoType } => {
+  const pieceGenerator = createPieceGenerator(seed, mode)
   return {
     pieceGenerator,
     nextPieceType: peekNextPiece(pieceGenerator),
@@ -137,8 +139,9 @@ const createLobbyGenerator = (seed: string): { pieceGenerator: PieceGenerator; n
 
 const prepareNewRun = (
   seed: string,
+  mode: GameMode,
 ): { activePiece: ActivePiece; nextPieceType: TetrominoType; pieceGenerator: PieceGenerator } => {
-  const generator = createPieceGenerator(seed, GAME_MODE)
+  const generator = createPieceGenerator(seed, mode)
   const firstPiece = getNextPiece(generator)
   const secondPiece = getNextPiece(firstPiece.generator)
 
@@ -465,10 +468,10 @@ const appendVisualFrame = (
   return [...frames, nextFrame]
 }
 
-const createInitialModel = (startLevel: number): GameModel => {
+const createInitialModel = (startLevel: number, mode: GameMode): GameModel => {
   const highScore = getHighScore()
   const seed = generateGameSeed()
-  const lobbyState = createLobbyGenerator(seed)
+  const lobbyState = createLobbyGenerator(seed, mode)
 
   return {
     board: createEmptyBoard(),
@@ -482,7 +485,7 @@ const createInitialModel = (startLevel: number): GameModel => {
     lineClearRows: [],
     comboState: createInitialComboState(),
     backToBackState: createInitialBackToBackState(),
-    stats: createGameStats(highScore, startLevel, seed),
+    stats: createGameStats(highScore, startLevel, seed, mode),
     state: 'START',
     startLevel,
     timing: {
@@ -504,8 +507,13 @@ const createInitialModel = (startLevel: number): GameModel => {
   }
 }
 
-export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
-  const [model, setModel] = useState<GameModel>(() => createInitialModel(startLevel))
+export const useGame = ({
+  startLevel,
+  animationsEnabled,
+  mode = DEFAULT_GAME_MODE,
+  persistHighScore = true,
+}: UseGameOptions) => {
+  const [model, setModel] = useState<GameModel>(() => createInitialModel(startLevel, mode))
   const frameRef = useRef<number | null>(null)
   const lastTickRef = useRef<number>(0)
   const lockFeedbackIdRef = useRef(0)
@@ -759,9 +767,9 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
       lastTickRef.current = nowMs
 
       setModel((prev) => {
-        const prepared = prepareNewRun(seed)
+        const prepared = prepareNewRun(seed, mode)
         const board = createEmptyBoard()
-        const stats = createGameStats(prev.stats.highScore, startLevel, seed)
+        const stats = createGameStats(prev.stats.highScore, startLevel, seed, mode)
         const startFrame = createReplayFrame({
           type: 'start',
           tick: 0,
@@ -823,7 +831,7 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
         }
       })
     },
-    [startLevel],
+    [mode, startLevel],
   )
 
   const restartGame = useCallback(
@@ -1221,8 +1229,12 @@ export const useGame = ({ startLevel, animationsEnabled }: UseGameOptions) => {
   )
 
   useEffect(() => {
+    if (!persistHighScore) {
+      return
+    }
+
     setHighScore(model.stats.highScore)
-  }, [model.stats.highScore])
+  }, [model.stats.highScore, persistHighScore])
 
   useEffect(() => {
     if (!model.pendingSpawn) {

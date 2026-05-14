@@ -1,6 +1,6 @@
 import { createDefaultKeybinds } from './keybinds'
 import { isSkinId } from '../skins/catalog'
-import type { BlockStyleId, GameSettings, SkinId, ThemeId } from '../types'
+import type { BlockStyleId, GameSettings, SkinId, ThemeId, UiLanguage } from '../types'
 
 const STORAGE_KEY = 'tetris-tma-settings'
 const LEGACY_STORAGE_KEY = 'tetris-tma-settings-v1'
@@ -14,6 +14,7 @@ const MAX_LOCK_DELAY = 1000
 
 const BLOCK_STYLE_IDS = new Set<BlockStyleId>(['CLASSIC', 'NEON', 'PIXEL'])
 const THEME_IDS = new Set<ThemeId>(['DEFAULT_DARK', 'AMOLED', 'RETRO'])
+const UI_LANGUAGES = new Set<UiLanguage>(['ru', 'en'])
 
 export type DeepPartial<T> = {
   [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K]
@@ -59,6 +60,28 @@ const getSkin = (value: unknown, fallback: SkinId): SkinId => {
   return isSkinId(value) ? value : fallback
 }
 
+const detectDefaultLanguage = (): UiLanguage => {
+  if (typeof window === 'undefined') {
+    return 'ru'
+  }
+
+  const telegramLanguage = window.Telegram?.WebApp?.initDataUnsafe.user?.language_code?.toLowerCase() ?? ''
+  if (telegramLanguage.startsWith('ru')) {
+    return 'ru'
+  }
+
+  const browserLanguage = window.navigator.language?.toLowerCase() ?? ''
+  if (browserLanguage.startsWith('ru')) {
+    return 'ru'
+  }
+
+  return 'en'
+}
+
+const getLanguage = (value: unknown, fallback: UiLanguage): UiLanguage => {
+  return typeof value === 'string' && UI_LANGUAGES.has(value as UiLanguage) ? (value as UiLanguage) : fallback
+}
+
 export const getDefaultSettings = (): GameSettings => {
   return {
     version: SETTINGS_VERSION,
@@ -88,6 +111,9 @@ export const getDefaultSettings = (): GameSettings => {
       vibration: true,
       volume: 0.65,
     },
+    ui: {
+      language: detectDefaultLanguage(),
+    },
   }
 }
 
@@ -101,6 +127,7 @@ const normalizeSettings = (raw: unknown): GameSettings => {
   const gameplay = isRecord(raw.gameplay) ? raw.gameplay : {}
   const visual = isRecord(raw.visual) ? raw.visual : {}
   const sound = isRecord(raw.sound) ? raw.sound : {}
+  const ui = isRecord(raw.ui) ? raw.ui : {}
   const keybinds = isRecord(controls.keybinds) ? controls.keybinds : {}
 
   return {
@@ -145,6 +172,9 @@ const normalizeSettings = (raw: unknown): GameSettings => {
       vibration: getBoolean(sound.vibration, defaults.sound.vibration),
       volume: getNumber(sound.volume ?? raw.volume, defaults.sound.volume, 0, 1),
     },
+    ui: {
+      language: getLanguage(ui.language ?? raw.language, defaults.ui.language),
+    },
   }
 }
 
@@ -171,6 +201,10 @@ const mergeSettings = (base: GameSettings, patch: DeepPartial<GameSettings>): Ga
     sound: {
       ...base.sound,
       ...patch.sound,
+    },
+    ui: {
+      ...base.ui,
+      ...patch.ui,
     },
   })
 }

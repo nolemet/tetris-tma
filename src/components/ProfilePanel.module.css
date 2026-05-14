@@ -66,11 +66,13 @@
 
 .stat,
 .statWide,
-.emptyState {
+.emptyState,
+.eloCard {
   padding: 12px;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.06);
+  min-width: 0;
 }
 
 .stat dt,
@@ -88,6 +90,23 @@
 
 .statWide {
   grid-column: span 2;
+}
+
+.eloCard {
+  display: grid;
+  gap: 12px;
+}
+
+.eloTitle {
+  margin: 0;
+  font-size: 18px;
+}
+
+.eloGrid {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
 }
 
 .primaryButton,
@@ -121,6 +140,10 @@
   }
 
   .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .eloGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 

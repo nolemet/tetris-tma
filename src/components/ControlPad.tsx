@@ -1,4 +1,5 @@
 import type { TouchEvent } from 'react'
+import { useI18n } from '../i18n'
 import type { GameState } from '../types'
 import styles from './ControlPad.module.css'
 
@@ -25,6 +26,7 @@ export const ControlPad = ({
   onHardDrop,
   onHold,
 }: ControlPadProps) => {
+  const { t } = useI18n()
   const disabled = state !== 'PLAYING' || !touchControlsEnabled
   const stopTouchPropagation = (event: TouchEvent<HTMLElement>) => {
     event.stopPropagation()
@@ -32,7 +34,7 @@ export const ControlPad = ({
 
   return (
     <section className={styles.card} onTouchStart={stopTouchPropagation} onTouchEnd={stopTouchPropagation}>
-      <h2 className={styles.title}>Controls</h2>
+      <h2 className={styles.title}>{t('controls.title')}</h2>
       <div className={styles.grid}>
         <button
           type="button"
@@ -41,7 +43,7 @@ export const ControlPad = ({
           onTouchStart={stopTouchPropagation}
           onTouchEnd={stopTouchPropagation}
         >
-          Left
+          {t('controls.left')}
         </button>
         <button
           type="button"
@@ -50,7 +52,7 @@ export const ControlPad = ({
           onTouchStart={stopTouchPropagation}
           onTouchEnd={stopTouchPropagation}
         >
-          Rotate
+          {t('controls.rotate')}
         </button>
         <button
           type="button"
@@ -59,7 +61,7 @@ export const ControlPad = ({
           onTouchStart={stopTouchPropagation}
           onTouchEnd={stopTouchPropagation}
         >
-          Right
+          {t('controls.right')}
         </button>
         <button
           type="button"
@@ -69,7 +71,7 @@ export const ControlPad = ({
           onTouchStart={stopTouchPropagation}
           onTouchEnd={stopTouchPropagation}
         >
-          Down
+          {t('controls.down')}
         </button>
         {showHoldButton ? (
           <button
@@ -80,7 +82,7 @@ export const ControlPad = ({
             onTouchStart={stopTouchPropagation}
             onTouchEnd={stopTouchPropagation}
           >
-            Hold
+            {t('controls.hold')}
           </button>
         ) : null}
         <button
@@ -91,7 +93,7 @@ export const ControlPad = ({
           onTouchStart={stopTouchPropagation}
           onTouchEnd={stopTouchPropagation}
         >
-          Hard drop
+          {t('controls.hardDrop')}
         </button>
       </div>
     </section>

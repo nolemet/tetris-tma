@@ -75,7 +75,7 @@
 
 .summaryGrid {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(138px, 1fr));
   gap: 10px;
 }
 
@@ -92,8 +92,16 @@
 
 .summaryValue {
   margin: 8px 0 0;
-  font-size: 26px;
+  min-width: 0;
+  font-size: clamp(20px, 3vw, 26px);
   font-weight: 800;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.summaryCard {
+  min-width: 0;
 }
 
 .metaRow {
@@ -196,7 +204,7 @@
 
 @media (max-width: 1024px) {
   .summaryGrid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   }
 }
 

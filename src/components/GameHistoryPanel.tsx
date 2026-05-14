@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
-import { formatDuration } from '../game/results'
-import type { GameResult } from '../types'
+import { useState } from 'react'
+import { useI18n } from '../i18n'
+import type { BotDifficulty, GameMode, GameResult, MatchResult } from '../types'
 import styles from './GameHistoryPanel.module.css'
 
 interface GameHistoryPanelProps {
@@ -13,9 +13,32 @@ interface GameHistoryPanelProps {
   onClearHistory: () => void
 }
 
-const formatPlayedAt = (value: string): string => {
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? 'Unknown date' : date.toLocaleString()
+const getModeLabelKey = (mode: GameMode) => {
+  return mode === 'vsBot' ? ('mode.vsBot' as const) : ('mode.classic' as const)
+}
+
+const getDifficultyLabelKey = (difficulty: BotDifficulty) => {
+  switch (difficulty) {
+    case 'easy':
+      return 'difficulty.easy' as const
+    case 'medium':
+      return 'difficulty.medium' as const
+    case 'hard':
+      return 'difficulty.hard' as const
+    case 'expert':
+      return 'difficulty.expert' as const
+  }
+}
+
+const getMatchResultLabelKey = (result: MatchResult) => {
+  switch (result) {
+    case 'win':
+      return 'vsBot.result.win' as const
+    case 'loss':
+      return 'vsBot.result.loss' as const
+    case 'draw':
+      return 'vsBot.result.draw' as const
+  }
 }
 
 export const GameHistoryPanel = ({
@@ -27,21 +50,21 @@ export const GameHistoryPanel = ({
   onBack,
   onClearHistory,
 }: GameHistoryPanelProps) => {
+  const { t, formatInteger, formatDuration, formatDateTime } = useI18n()
   const [confirmClear, setConfirmClear] = useState(false)
 
   const hasHistory = history.length > 0
-  const replayAvailability = useMemo(() => availableReplayIds, [availableReplayIds])
 
   return (
     <section className={styles.card}>
       <div className={styles.header}>
         <div>
-          <h2 className={styles.title}>История игр</h2>
-          <p className={styles.subtitle}>Последние локально сохранённые партии и доступные реплеи.</p>
+          <h2 className={styles.title}>{t('history.title')}</h2>
+          <p className={styles.subtitle}>{t('history.subtitle')}</p>
         </div>
         <div className={styles.headerActions}>
           <button type="button" className={styles.ghostButton} onClick={onBack}>
-            Назад
+            {t('common.back')}
           </button>
           <button
             type="button"
@@ -49,14 +72,14 @@ export const GameHistoryPanel = ({
             onClick={() => setConfirmClear((prev) => !prev)}
             disabled={!hasHistory}
           >
-            Clear history
+            {t('history.clear')}
           </button>
         </div>
       </div>
 
       {confirmClear ? (
         <div className={styles.confirmCard}>
-          <p className={styles.confirmText}>Очистить историю и связанные локальные реплеи?</p>
+          <p className={styles.confirmText}>{t('history.clearConfirm')}</p>
           <div className={styles.confirmActions}>
             <button
               type="button"
@@ -66,67 +89,92 @@ export const GameHistoryPanel = ({
                 setConfirmClear(false)
               }}
             >
-              Да, очистить
+              {t('history.clearApprove')}
             </button>
             <button type="button" className={styles.ghostButton} onClick={() => setConfirmClear(false)}>
-              Отмена
+              {t('common.cancel')}
             </button>
           </div>
         </div>
       ) : null}
 
       {!hasHistory ? (
-        <div className={styles.emptyState}>Пока нет сыгранных партий</div>
+        <div className={styles.emptyState}>{t('history.empty')}</div>
       ) : (
         <div className={styles.list}>
           {history.map((item) => {
-            const replayAvailable = Boolean(item.replayId && replayAvailability.has(item.replayId))
+            const replayAvailable = Boolean(item.replayId && availableReplayIds.has(item.replayId))
             const analysisAvailable = Boolean(item.replayId && availableAnalysisIds.has(item.replayId))
+
             return (
               <article key={item.id} className={styles.item}>
                 <div className={styles.itemHeader}>
                   <div>
-                    <h3 className={styles.itemTitle}>{formatPlayedAt(item.endedAt)}</h3>
+                    <h3 className={styles.itemTitle}>
+                      {item.endedAt ? formatDateTime(item.endedAt) : t('history.unknownDate')}
+                    </h3>
                     <p className={styles.itemMeta}>
-                      {item.mode} • Grade {item.grade} • Rating {item.rating}
+                      {t(getModeLabelKey(item.mode))} · {t('common.grade')} {item.grade} · {t('common.rating')} {formatInteger(item.rating)}
                     </p>
                   </div>
-                  <span className={styles.seedBadge}>Seed: {item.seed}</span>
+                  <span className={styles.seedBadge}>
+                    {t('common.seed')}: {item.seed}
+                  </span>
                 </div>
 
                 <dl className={styles.grid}>
                   <div className={styles.stat}>
-                    <dt>Score</dt>
-                    <dd>{item.score}</dd>
+                    <dt>{t('common.score')}</dt>
+                    <dd>{formatInteger(item.score)}</dd>
                   </div>
                   <div className={styles.stat}>
-                    <dt>Lines</dt>
-                    <dd>{item.lines}</dd>
+                    <dt>{t('common.lines')}</dt>
+                    <dd>{formatInteger(item.lines)}</dd>
                   </div>
                   <div className={styles.stat}>
-                    <dt>Pieces</dt>
-                    <dd>{item.piecesPlaced}</dd>
+                    <dt>{t('common.pieces')}</dt>
+                    <dd>{formatInteger(item.piecesPlaced)}</dd>
                   </div>
                   <div className={styles.stat}>
-                    <dt>Duration</dt>
+                    <dt>{t('common.duration')}</dt>
                     <dd>{formatDuration(item.timePlayedMs)}</dd>
                   </div>
+                  {item.mode === 'vsBot' ? (
+                    <>
+                      <div className={styles.stat}>
+                        <dt>{t('history.botScore')}</dt>
+                        <dd>{formatInteger(item.botScore ?? 0)}</dd>
+                      </div>
+                      <div className={styles.stat}>
+                        <dt>{t('history.result')}</dt>
+                        <dd>{item.matchResult ? t(getMatchResultLabelKey(item.matchResult)) : '-'}</dd>
+                      </div>
+                      <div className={styles.stat}>
+                        <dt>{t('history.eloChange')}</dt>
+                        <dd>{item.eloChange === null || item.eloChange === undefined ? '-' : `${item.eloChange > 0 ? '+' : ''}${formatInteger(item.eloChange)}`}</dd>
+                      </div>
+                      <div className={styles.stat}>
+                        <dt>{t('history.difficulty')}</dt>
+                        <dd>{item.botDifficulty ? t(getDifficultyLabelKey(item.botDifficulty)) : '-'}</dd>
+                      </div>
+                    </>
+                  ) : null}
                 </dl>
 
                 <div className={styles.actions}>
                   {replayAvailable && item.replayId ? (
                     <button type="button" className={styles.primaryButton} onClick={() => onOpenReplay(item.replayId!)}>
-                      Replay
+                      {t('common.replay')}
                     </button>
                   ) : (
-                    <span className={styles.unavailable}>Replay unavailable</span>
+                    <span className={styles.unavailable}>{t('history.replayUnavailable')}</span>
                   )}
                   {analysisAvailable && item.replayId ? (
                     <button type="button" className={styles.ghostButton} onClick={() => onOpenAnalysis(item.replayId!)}>
-                      Analysis
+                      {t('common.analysis')}
                     </button>
                   ) : (
-                    <span className={styles.unavailable}>Analysis unavailable</span>
+                    <span className={styles.unavailable}>{t('history.analysisUnavailable')}</span>
                   )}
                 </div>
               </article>

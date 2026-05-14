@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n'
 import styles from './MainMenu.module.css'
 
 interface MainMenuProps {
@@ -17,26 +18,28 @@ export const MainMenu = ({
   onOpenModes,
   onOpenSettings,
 }: MainMenuProps) => {
+  const { t } = useI18n()
+
   return (
     <section className={styles.card}>
       <div className={styles.body}>
         <button type="button" className={styles.primaryButton} onClick={onPlay}>
-          Играть
+          {t('mainMenu.play')}
         </button>
         <button type="button" className={styles.secondaryButton} onClick={onOpenHistory}>
-          История игр
+          {t('mainMenu.history')}
         </button>
         <button type="button" className={styles.secondaryButton} onClick={onOpenProfile}>
-          Профиль
+          {t('mainMenu.profile')}
         </button>
         <button type="button" className={styles.secondaryButton} onClick={onOpenSkins}>
-          Скины
+          {t('mainMenu.skins')}
         </button>
         <button type="button" className={styles.secondaryButton} onClick={onOpenModes}>
-          Режимы игры
+          {t('mainMenu.modes')}
         </button>
         <button type="button" className={styles.secondaryButton} onClick={onOpenSettings}>
-          Настройки
+          {t('mainMenu.settings')}
         </button>
       </div>
     </section>

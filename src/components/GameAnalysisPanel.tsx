@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import { analyzeGameMoves } from '../analysis'
-import { formatDuration } from '../game/results'
+import type { MoveAnalysis } from '../analysis/types'
+import { useI18n } from '../i18n'
 import { isReplayV3, type GameReplay } from '../replays/types'
-import type { BoardMatrix, TetrominoType } from '../types'
+import type { BoardMatrix, GameMode, TetrominoType } from '../types'
 import styles from './GameAnalysisPanel.module.css'
 
 interface GameAnalysisPanelProps {
@@ -13,27 +14,157 @@ interface GameAnalysisPanelProps {
   onBackToMenu: () => void
 }
 
-const SUMMARY_LABELS = [
-  { key: 'accuracy', title: 'Accuracy' },
-  { key: 'totalMoves', title: 'Total moves' },
-  { key: 'goodMoves', title: 'Good moves' },
-  { key: 'inaccuracies', title: 'Inaccuracies' },
-  { key: 'mistakes', title: 'Mistakes' },
-  { key: 'blunders', title: 'Blunders' },
-  { key: 'totalScoreLoss', title: 'Total score loss' },
-] as const
+const getModeLabelKey = (mode: GameMode) => {
+  return mode === 'vsBot' ? ('mode.vsBot' as const) : ('mode.classic' as const)
+}
 
-const formatSeverity = (value: string): string => {
+const getSeverityLabelKey = (value: string) => {
   if (value === 'good') {
-    return 'Good'
+    return 'analysis.severity.good' as const
   }
   if (value === 'inaccuracy') {
-    return 'Inaccuracy'
+    return 'analysis.severity.inaccuracy' as const
   }
   if (value === 'mistake') {
-    return 'Mistake'
+    return 'analysis.severity.mistake' as const
   }
-  return 'Blunder'
+  return 'analysis.severity.blunder' as const
+}
+
+const getAccuracyLabelKey = (value: string) => {
+  if (value === 'Excellent') {
+    return 'analysis.accuracyLabel.excellent' as const
+  }
+  if (value === 'Good') {
+    return 'analysis.accuracyLabel.good' as const
+  }
+  if (value === 'Average') {
+    return 'analysis.accuracyLabel.average' as const
+  }
+  if (value === 'Weak') {
+    return 'analysis.accuracyLabel.weak' as const
+  }
+  return 'analysis.accuracyLabel.poor' as const
+}
+
+const createLocalizedExplanation = (
+  move: MoveAnalysis,
+  helpers: {
+    t: ReturnType<typeof useI18n>['t']
+    formatInteger: ReturnType<typeof useI18n>['formatInteger']
+    formatScoreLoss: ReturnType<typeof useI18n>['formatScoreLoss']
+  },
+) => {
+  const { t, formatInteger, formatScoreLoss } = helpers
+  const delta = move.playerEvaluation.delta
+  const positives: string[] = []
+  const negatives: string[] = []
+
+  if (move.moveEvent.linesCleared > 0) {
+    positives.push(
+      t('analysis.explanation.clearedLines', {
+        value: formatInteger(move.moveEvent.linesCleared),
+      }),
+    )
+  }
+  if (move.moveEvent.linesCleared === 4) {
+    positives.push(t('analysis.explanation.madeTetris'))
+  }
+  if (delta.holes < 0) {
+    positives.push(t('analysis.explanation.removedHoles', { value: formatInteger(Math.abs(delta.holes)) }))
+  }
+  if (delta.coveredHoles < 0) {
+    positives.push(
+      t('analysis.explanation.reducedCoveredHoles', {
+        value: formatInteger(Math.abs(delta.coveredHoles)),
+      }),
+    )
+  }
+  if (delta.aggregateHeight < 0) {
+    positives.push(
+      t('analysis.explanation.loweredAggregateHeight', {
+        value: formatInteger(Math.abs(delta.aggregateHeight)),
+      }),
+    )
+  }
+  if (delta.maxHeight < 0) {
+    positives.push(
+      t('analysis.explanation.loweredMaxHeight', {
+        value: formatInteger(Math.abs(delta.maxHeight)),
+      }),
+    )
+  }
+  if (delta.bumpiness < 0) {
+    positives.push(
+      t('analysis.explanation.reducedBumpiness', {
+        value: formatInteger(Math.abs(delta.bumpiness)),
+      }),
+    )
+  }
+  if (delta.rowTransitions < 0 || delta.columnTransitions < 0) {
+    positives.push(t('analysis.explanation.reducedTransitions'))
+  }
+
+  if (move.scoreLoss > 0 && move.severity !== 'good') {
+    negatives.push(t('analysis.explanation.bestAlternative', { value: formatScoreLoss(move.scoreLoss) }))
+  }
+  if (delta.holes > 0) {
+    negatives.push(t('analysis.explanation.createdHoles', { value: formatInteger(delta.holes) }))
+  }
+  if (delta.coveredHoles > 0) {
+    negatives.push(
+      t('analysis.explanation.createdCoveredHoles', {
+        value: formatInteger(delta.coveredHoles),
+      }),
+    )
+  }
+  if (delta.aggregateHeight > 0) {
+    negatives.push(
+      t('analysis.explanation.raisedAggregateHeight', {
+        value: formatInteger(delta.aggregateHeight),
+      }),
+    )
+  }
+  if (delta.maxHeight > 0) {
+    negatives.push(
+      t('analysis.explanation.raisedMaxHeight', {
+        value: formatInteger(delta.maxHeight),
+      }),
+    )
+  }
+  if (delta.bumpiness > 0) {
+    negatives.push(
+      t('analysis.explanation.increasedBumpiness', {
+        value: formatInteger(delta.bumpiness),
+      }),
+    )
+  }
+  if (delta.rowTransitions > 0 || delta.columnTransitions > 0) {
+    negatives.push(t('analysis.explanation.increasedTransitions'))
+  }
+  if (delta.wells > 0) {
+    negatives.push(t('analysis.explanation.deeperWells', { value: formatInteger(delta.wells) }))
+  }
+
+  let summary = t('analysis.explanation.goodStable')
+  if (move.severity === 'blunder') {
+    summary = t('analysis.explanation.blunder')
+  } else if (move.severity === 'mistake') {
+    summary =
+      delta.holes > 0 || delta.coveredHoles > 0
+        ? t('analysis.explanation.mistakeHoles')
+        : t('analysis.explanation.mistakeHeight')
+  } else if (move.severity === 'inaccuracy') {
+    summary = t('analysis.explanation.inaccuracy')
+  } else if (move.moveEvent.linesCleared > 0) {
+    summary = t('analysis.explanation.goodLines')
+  }
+
+  return {
+    summary,
+    positives,
+    negatives,
+  }
 }
 
 const MiniBoardPreview = ({
@@ -73,6 +204,7 @@ export const GameAnalysisPanel = ({
   onBackToHistory,
   onBackToMenu,
 }: GameAnalysisPanelProps) => {
+  const { t, formatInteger, formatDecimal, formatScoreLoss, formatPercent, formatDuration, formatDateTime } = useI18n()
   const [expandedMoves, setExpandedMoves] = useState<Record<string, boolean>>({})
 
   const analysis = useMemo(() => {
@@ -86,14 +218,14 @@ export const GameAnalysisPanel = ({
   if (!replay) {
     return (
       <section className={styles.card}>
-        <h2 className={styles.title}>Разбор партии</h2>
-        <p className={styles.subtitle}>Analysis data is unavailable on this device.</p>
+        <h2 className={styles.title}>{t('analysis.title')}</h2>
+        <p className={styles.subtitle}>{t('analysis.notAvailable')}</p>
         <div className={styles.buttonRow}>
           <button type="button" className={styles.secondaryButton} onClick={onBackToHistory}>
-            Back to history
+            {t('common.backToHistory')}
           </button>
           <button type="button" className={styles.secondaryButton} onClick={onBackToMenu}>
-            Back to menu
+            {t('common.backToMenu')}
           </button>
         </div>
       </section>
@@ -103,126 +235,150 @@ export const GameAnalysisPanel = ({
   const analysisResult = isReplayV3(replay) && replay.moveEvents.length > 0 ? analysis : null
   const summaryValues = analysisResult
     ? {
-        accuracy: `${analysisResult.accuracy}%`,
-        totalMoves: `${analysisResult.totalMoves}`,
-        goodMoves: `${analysisResult.goodMoves}`,
-        inaccuracies: `${analysisResult.inaccuracies}`,
-        mistakes: `${analysisResult.mistakes}`,
-        blunders: `${analysisResult.blunders}`,
-        totalScoreLoss: `${analysisResult.totalScoreLoss}`,
+        accuracy: formatPercent(analysisResult.accuracy),
+        totalMoves: formatInteger(analysisResult.totalMoves),
+        goodMoves: formatInteger(analysisResult.goodMoves),
+        inaccuracies: formatInteger(analysisResult.inaccuracies),
+        mistakes: formatInteger(analysisResult.mistakes),
+        blunders: formatInteger(analysisResult.blunders),
+        totalScoreLoss: formatScoreLoss(analysisResult.totalScoreLoss),
       }
     : null
+  const summaryItems = analysisResult
+    ? [
+        {
+          key: 'analysis.accuracy' as const,
+          value: summaryValues?.accuracy,
+          hint: t(getAccuracyLabelKey(analysisResult.accuracyLabel)),
+        },
+        { key: 'analysis.totalMoves' as const, value: summaryValues?.totalMoves },
+        { key: 'analysis.goodMoves' as const, value: summaryValues?.goodMoves },
+        { key: 'analysis.inaccuracies' as const, value: summaryValues?.inaccuracies },
+        { key: 'analysis.mistakes' as const, value: summaryValues?.mistakes },
+        { key: 'analysis.blunders' as const, value: summaryValues?.blunders },
+        { key: 'analysis.totalScoreLoss' as const, value: summaryValues?.totalScoreLoss },
+      ]
+    : []
 
   return (
     <section className={styles.card}>
       <div className={styles.header}>
         <div>
-          <h2 className={styles.title}>Разбор партии</h2>
+          <h2 className={styles.title}>{t('analysis.title')}</h2>
           <p className={styles.subtitle}>
-            Classic · Seed {replay.seed} · {new Date(replay.finishedAt).toLocaleString()}
+            {t('analysis.subtitle', {
+              mode: t(getModeLabelKey(replay.mode)),
+              seed: replay.seed,
+              date: formatDateTime(replay.finishedAt),
+            })}
           </p>
         </div>
         <div className={styles.buttonRow}>
           <button type="button" className={styles.secondaryButton} onClick={onBackToHistory}>
-            Back to history
+            {t('common.backToHistory')}
           </button>
           <button type="button" className={styles.secondaryButton} onClick={onBackToMenu}>
-            Back to menu
+            {t('common.backToMenu')}
           </button>
           <button type="button" className={styles.primaryButton} onClick={onOpenReplay}>
-            Open replay
+            {t('analysis.openReplay')}
           </button>
         </div>
       </div>
 
       {!analysisResult ? (
         <div className={styles.emptyState}>
-          <p className={styles.emptyText}>Analysis unavailable for this replay.</p>
-          <p className={styles.helperText}>
-            Older replays can still be watched, but only newer replay v3 runs include move events for post-game analysis.
-          </p>
+          <p className={styles.emptyText}>{t('analysis.unavailableReplay')}</p>
+          <p className={styles.helperText}>{t('analysis.unavailableHelp')}</p>
         </div>
       ) : (
         <>
           <div className={styles.summaryGrid}>
-            {SUMMARY_LABELS.map((item) => (
+            {summaryItems.map((item) => (
               <article key={item.key} className={styles.summaryCard}>
-                <h3 className={styles.summaryTitle}>{item.title}</h3>
-                <p className={styles.summaryValue}>{summaryValues?.[item.key] ?? '-'}</p>
-                {item.key === 'accuracy' ? (
-                  <p className={styles.summaryHint}>{analysisResult.accuracyLabel}</p>
-                ) : null}
+                <h3 className={styles.summaryTitle}>{t(item.key)}</h3>
+                <p className={styles.summaryValue}>{item.value ?? '-'}</p>
+                {item.hint ? <p className={styles.summaryHint}>{item.hint}</p> : null}
               </article>
             ))}
           </div>
 
           <div className={styles.metaRow}>
-            <span className={styles.badge}>Analyzed moves: {analysisResult.analyzedMoves}</span>
-            <span className={styles.badge}>Average score loss: {analysisResult.averageScoreLoss}</span>
-            <span className={styles.badge}>Duration: {formatDuration(replay.durationMs)}</span>
+            <span className={styles.badge}>{t('analysis.analyzedMoves', { count: formatInteger(analysisResult.analyzedMoves) })}</span>
+            <span className={styles.badge}>{t('analysis.averageScoreLoss', { value: formatDecimal(analysisResult.averageScoreLoss) })}</span>
+            <span className={styles.badge}>{t('common.duration')}: {formatDuration(replay.durationMs)}</span>
             {analysisResult.skippedMoves.length > 0 ? (
-              <span className={styles.badge}>Skipped: {analysisResult.skippedMoves.length}</span>
+              <span className={styles.badge}>{t('analysis.skippedMoves', { count: formatInteger(analysisResult.skippedMoves.length) })}</span>
             ) : null}
           </div>
 
           <section className={styles.section}>
             <div className={styles.sectionHeader}>
               <div>
-                <h3 className={styles.sectionTitle}>Top mistakes</h3>
-                <p className={styles.sectionText}>The largest score losses are shown first, using real board snapshots from the game.</p>
+                <h3 className={styles.sectionTitle}>{t('analysis.topMistakes')}</h3>
+                <p className={styles.sectionText}>{t('analysis.topMistakesText')}</p>
               </div>
             </div>
 
             {analysisResult.topMistakes.length === 0 ? (
               <div className={styles.emptyState}>
-                <p className={styles.emptyText}>No major mistakes detected in this game.</p>
-                <p className={styles.helperText}>The move log is available, but the evaluator did not find meaningful score loss in the recorded placements.</p>
+                <p className={styles.emptyText}>{t('analysis.none')}</p>
+                <p className={styles.helperText}>{t('analysis.noneText')}</p>
               </div>
             ) : (
               <div className={styles.mistakeList}>
                 {analysisResult.topMistakes.map((move) => {
                   const isExpanded = expandedMoves[move.moveEvent.id] ?? false
+                  const explanation = createLocalizedExplanation(move, {
+                    t,
+                    formatInteger,
+                    formatScoreLoss,
+                  })
 
                   return (
                     <article key={move.moveEvent.id} className={styles.mistakeCard}>
                       <div className={styles.mistakeHeader}>
                         <div>
-                          <h4 className={styles.mistakeTitle}>Move #{move.moveIndex}</h4>
+                          <h4 className={styles.mistakeTitle}>{t('analysis.moveNumber', { number: move.moveIndex })}</h4>
                           <p className={styles.mistakeMeta}>
-                            Piece {move.pieceType} · Time {formatDuration(move.timeMs)} · Score loss {move.scoreLoss}
+                            {t('analysis.moveMeta', {
+                              piece: move.pieceType,
+                              time: formatDuration(move.timeMs),
+                              loss: formatScoreLoss(move.scoreLoss),
+                            })}
                           </p>
                         </div>
-                        <span className={`${styles.severityBadge} ${styles[`severity${formatSeverity(move.severity)}`]}`}>
-                          {formatSeverity(move.severity)}
+                        <span className={`${styles.severityBadge} ${styles[`severity${move.severity.charAt(0).toUpperCase()}${move.severity.slice(1)}`]}`}>
+                          {t(getSeverityLabelKey(move.severity))}
                         </span>
                       </div>
 
-                      <p className={styles.summaryText}>{move.explanation.summary}</p>
+                      <p className={styles.summaryText}>{explanation.summary}</p>
 
                       <div className={styles.explanationGrid}>
                         <div className={styles.explanationCard}>
-                          <h5 className={styles.explanationTitle}>Positives</h5>
-                          {move.explanation.positives.length > 0 ? (
+                          <h5 className={styles.explanationTitle}>{t('analysis.positives')}</h5>
+                          {explanation.positives.length > 0 ? (
                             <ul className={styles.explanationList}>
-                              {move.explanation.positives.map((item, index) => (
+                              {explanation.positives.map((item, index) => (
                                 <li key={`${move.moveEvent.id}-positive-${index}`}>{item}</li>
                               ))}
                             </ul>
                           ) : (
-                            <p className={styles.helperText}>No meaningful upside was recorded for this move.</p>
+                            <p className={styles.helperText}>{t('analysis.noPositives')}</p>
                           )}
                         </div>
 
                         <div className={styles.explanationCard}>
-                          <h5 className={styles.explanationTitle}>Negatives</h5>
-                          {move.explanation.negatives.length > 0 ? (
+                          <h5 className={styles.explanationTitle}>{t('analysis.negatives')}</h5>
+                          {explanation.negatives.length > 0 ? (
                             <ul className={styles.explanationList}>
-                              {move.explanation.negatives.map((item, index) => (
+                              {explanation.negatives.map((item, index) => (
                                 <li key={`${move.moveEvent.id}-negative-${index}`}>{item}</li>
                               ))}
                             </ul>
                           ) : (
-                            <p className={styles.helperText}>This move did not produce negative structural metrics.</p>
+                            <p className={styles.helperText}>{t('analysis.noNegatives')}</p>
                           )}
                         </div>
                       </div>
@@ -238,15 +394,15 @@ export const GameAnalysisPanel = ({
                             }))
                           }
                         >
-                          {isExpanded ? 'Hide boards' : 'Show boards'}
+                          {isExpanded ? t('analysis.hideBoards') : t('analysis.showBoards')}
                         </button>
                       </div>
 
                       {isExpanded ? (
                         <div className={styles.boardsRow}>
-                          <MiniBoardPreview board={move.boardBefore} pieceColors={pieceColors} title="Before" />
-                          <MiniBoardPreview board={move.boardAfter} pieceColors={pieceColors} title="Your move" />
-                          <MiniBoardPreview board={move.suggestedBoard} pieceColors={pieceColors} title="Suggested move" />
+                          <MiniBoardPreview board={move.boardBefore} pieceColors={pieceColors} title={t('analysis.before')} />
+                          <MiniBoardPreview board={move.boardAfter} pieceColors={pieceColors} title={t('analysis.yourMove')} />
+                          <MiniBoardPreview board={move.suggestedBoard} pieceColors={pieceColors} title={t('analysis.suggestedMove')} />
                         </div>
                       ) : null}
                     </article>

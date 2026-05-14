@@ -1,5 +1,5 @@
 import { calculateGameGrade, calculateGameRating } from '../game/results'
-import type { GameResult, GameStats } from '../types'
+import type { BotDifficulty, GameResult, GameStats, GameMode, MatchResult } from '../types'
 
 const HISTORY_KEY = 'tetris-tma-game-history'
 const HISTORY_LIMIT = 20
@@ -24,6 +24,18 @@ const getString = (value: unknown, fallback = ''): string => {
   return typeof value === 'string' ? value : fallback
 }
 
+const getGameMode = (value: unknown): GameMode => {
+  return value === 'vsBot' ? 'vsBot' : 'classic'
+}
+
+const getBotDifficulty = (value: unknown): BotDifficulty | null => {
+  return value === 'easy' || value === 'medium' || value === 'hard' || value === 'expert' ? value : null
+}
+
+const getMatchResult = (value: unknown): MatchResult | null => {
+  return value === 'win' || value === 'loss' || value === 'draw' ? value : null
+}
+
 const normalizeHistoryStats = (raw: Record<string, unknown>): GameStats => {
   return {
     score: getNumber(raw.score),
@@ -45,7 +57,7 @@ const normalizeHistoryStats = (raw: Record<string, unknown>): GameStats => {
     holesCreated: getNumber(raw.holesCreated),
     timePlayedMs: getNumber(raw.timePlayedMs),
     averageTimePerPieceMs: getNumber(raw.averageTimePerPieceMs),
-    mode: getString(raw.mode, 'classic') === 'classic' ? 'classic' : 'classic',
+    mode: getGameMode(raw.mode),
     seed: getString(raw.seed, 'unknown-seed'),
   }
 }
@@ -71,6 +83,13 @@ const normalizeGameResult = (raw: unknown): GameResult | null => {
       : calculateGameGrade(stats),
     rating,
     replayId,
+    botDifficulty: getBotDifficulty(raw.botDifficulty),
+    botScore: raw.botScore === undefined ? null : getNumber(raw.botScore),
+    matchResult: getMatchResult(raw.matchResult),
+    eloBefore: raw.eloBefore === undefined ? null : getNumber(raw.eloBefore),
+    eloAfter: raw.eloAfter === undefined ? null : getNumber(raw.eloAfter),
+    eloChange: raw.eloChange === undefined ? null : getNumber(raw.eloChange),
+    botRating: raw.botRating === undefined ? null : getNumber(raw.botRating),
   }
 }
 
